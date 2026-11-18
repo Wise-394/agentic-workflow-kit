@@ -11,7 +11,7 @@ A reusable, tool-agnostic and model-agnostic kit for running a team of coding ag
 
 - No installer program. The kit is markdown that an agent follows.
 - No hard-coded tool, model, stack, or tracker in kit files.
-- No auto-picking of work. The user hands the agent an issue.
+- No picking work on its own initiative. The user starts either one issue (`run-issue`) or a whole milestone (`run-sprint`).
 
 ## 2. Principles
 
@@ -33,14 +33,15 @@ agentic-workflow-kit/
   roles/             one file per role: purpose, inputs, outputs, allowed actions, stop conditions
     planner.md  scout.md  test-writer.md  coder.md  checker.md  verifier.md  delivery.md  pr-reviewer.md
   skills/            portable SKILL.md files
-    run-issue/       the main flow (section 6)
+    run-issue/       one issue, issue → PR (section 6)
+    run-sprint/      a whole milestone on a sprint branch (section 7)
     write-plan/      plan comment structure and rules
     playbooks/       feature, bug-fix, refactor, investigation
     verify/          how to create and maintain a project's verify-<project> skill
     pr-review/       independent PR review incl. blast radius
-    plan-project/    idea → PRD → milestones → issues (incl. one verification issue per milestone)
+    plan-project/    idea → PRD → milestones → issues (incl. one verification issue per milestone); update mode
   tracker/
-    github.md        exact gh commands for every tracker action (section 7)
+    github.md        exact gh commands for every tracker action (section 9)
   templates/
     AGENTS.md        project rules skeleton
     issue.md  plan-comment.md  pr-body.md  verification-issue.md
@@ -49,7 +50,7 @@ agentic-workflow-kit/
   adapters/          how to render roles, models and permissions for a specific tool
     opencode.md  claude-code.md
   safety/
-    baseline.md      the universal rules (section 8)
+    baseline.md      the universal rules (section 10)
   examples/sandbox/  tiny repo used to test the kit
   docs/specs/        design documents
 ```
@@ -72,7 +73,7 @@ Kit files never name a model, tool, stack, or project. Adapters are the only fil
   "models": { "thinking": "<provider/model>", "working": "<provider/model or inherit>" },
   "commands": { "check": "npm run check", "test": "npm test -- {file}", "format": "npm run format" },
   "forbiddenCommands": ["expo prebuild", "gradlew"],
-  "git": { "integrationBranch": "dev", "branchPattern": "<type>/<issue>-<slug>" },
+  "git": { "integrationBranch": "dev", "branchPattern": "<type>/<issue>-<slug>", "sprintBranchPattern": "sprint/<milestone>" },
   "tracker": { "kind": "github", "repo": "<owner>/<repo>" },
   "merge": "user",
   "limits": { "sameErrorRetries": 8 },
@@ -116,12 +117,34 @@ Playbook differences:
 
 Resume: read labels, plan comment, branch, and PR; continue from the first unfinished step.
 
-## 7. Tracker mapping (GitHub first)
+When run inside `run-sprint`, the issue branch is cut from the sprint branch, the PR targets the sprint branch, and after approval the agent always merges it there (the merge setting applies only to the final sprint PR).
+
+## 7. Running a sprint (`skills/run-sprint`)
+
+Triggered by the user naming a milestone ("run sprint 2").
+
+1. **Sprint branch.** Create `sprint/<milestone>` from the integration branch. Open a draft PR `sprint/<milestone> → <integration branch>` immediately; it is the live progress view.
+2. **Order.** Read the milestone's open issues (excluding its verification issue), sort by "Blocked by" links, show the order to the user once, then start.
+3. **Each issue.** Run `run-issue` against the sprint branch (section 6). After independent review approves and CI is green, the agent merges the issue PR into the sprint branch.
+4. **Stuck issues.** If an issue needs input or hits a retry/step limit: label it (`status:needs-input` / `status:blocked`), skip to the next issue not depending on it, continue. Dependents of a stuck issue wait.
+5. **Sprint verification.** When no runnable issues remain, run the milestone's verification issue against the whole sprint branch: full check command, the `verify-<project>` skill, and the user checklist.
+6. **Sprint review.** A fresh pr-reviewer reviews the full sprint PR diff for cross-issue conflicts, duplicated helpers, and blast radius.
+7. **Merge.** Sprint PR → integration branch follows the project's merge setting (`user` or `agent`). Merge requires: all non-stuck issues merged, verification passed or its remaining rows handed to the user, sprint review approved, green CI. Issues close via their `Closes #N`; the milestone closes when all its issues are closed.
+8. **Report.** Done issues, stuck issues with reasons, evidence, and the user checks still open.
+
+Resume: read the milestone, labels, sprint branch, and sprint PR; continue with the next unfinished issue.
+
+## 8. Project planning (`skills/plan-project`)
+
+- **Create mode:** interview the user about the product; write the PRD issue with requirement IDs; split work into milestones and issues (each issue lists its requirement IDs, acceptance tests in plain words, and "Blocked by" links); add one verification issue per milestone. Show the full list before creating anything.
+- **Update mode:** a new idea or change is written into the PRD issue with new or revised requirement IDs, then turned into issues added to an open milestone or a new one. Show the diff before writing.
+
+## 9. Tracker mapping (GitHub first)
 
 | Concept | GitHub |
 |---|---|
 | PRD | Pinned `PRD` issue (or wiki), requirement IDs inside |
-| Sprint | Milestone |
+| Sprint | Milestone + `sprint/<milestone>` branch + draft sprint PR |
 | Ticket | Issue with `type:*` and `area:*` labels |
 | Dependency | "Blocked by #N" in the body |
 | Status | `status:in-progress`, `status:needs-input`, `status:blocked`, `status:in-review` |
@@ -131,34 +154,35 @@ Resume: read labels, plan comment, branch, and PR; continue from the first unfin
 
 `tracker/github.md` lists the exact `gh` command per action. Another tracker = another file with the same action list.
 
-## 8. Safety baseline (`safety/baseline.md`)
+## 10. Safety baseline (`safety/baseline.md`)
 
-Never: force push, rewrite history, `git reset`/`stash`/`clean`/`checkout --`, delete branches or repos, `sudo`, `rm -rf`, edit or read `.env`/secrets, add/upgrade/remove packages unless a plan step says so, close issues by hand, merge unless `merge: agent` and all merge conditions hold. Tracker writes only through `tracker/github.md` commands.
+Never: force push, rewrite history, `git reset`/`stash`/`clean`/`checkout --`, delete branches or repos, `sudo`, `rm -rf`, edit or read `.env`/secrets, add/upgrade/remove packages unless a plan step says so, close issues by hand, merge into the integration branch unless `merge: agent` and all merge conditions hold (merging an approved issue PR into its sprint branch is always allowed). Tracker writes only through `tracker/github.md` commands.
 
 Role permissions: scout and pr-reviewer read-only; test-writer edits tests only; coder never edits tests; delivery is the only role that pushes or opens PRs. Each worker has a step limit and the same-error retry limit; hitting either returns to the planner with attempts listed.
 
 Projects add rules in `AGENTS.md` and `forbiddenCommands`. Adapters translate baseline + project rules into the tool's permission config once, not per agent.
 
-## 9. Testing the kit
+## 11. Testing the kit
 
-- `examples/sandbox/` plus a release checklist: run setup, run one feature issue and one bug-fix issue, confirm labels, plan comment, PR, review, evidence, merge behavior.
+- `examples/sandbox/` plus a release checklist: run setup, run one feature issue and one bug-fix issue, then a two-issue sprint, confirm labels, plan comment, PR, review, evidence, merge behavior.
 - Dry run on a real existing project before each release (report changes, write nothing).
 - `VERSION` + `CHANGELOG.md` so `UPDATE.md` can show what changed.
 
-## 10. Adopting the kit in an existing project
+## 12. Adopting the kit in an existing project
 
 - Existing hard rules in `AGENTS.md` (or similar) become project rules; commands agents must not run go in `forbiddenCommands`.
 - Existing tool-specific agent and skill files are replaced by adapter output, after a diff the user approves.
 - File-based ticket tracking (sprint folders, timelines, status sections) stops being the source of truth; open tickets become issues under milestones.
 - Unused or unknown tooling is listed for the user to keep or remove; setup never deletes it on its own.
 
-## 11. Decisions made
+## 13. Decisions made
 
 - Tool and model agnostic; choices recorded per project at setup.
 - Kit = markdown followed by an agent (no installer program).
 - Copy-once with explicit, diffed updates.
 - State in the tracker; plan as an issue comment; PR body summarizes and links it.
-- User provides the issue; no auto-picking.
+- Two run modes: `run-issue` (user pastes an issue) and `run-sprint` (user names a milestone; issues run in dependency order on a sprint branch).
+- `plan-project` creates the PRD, milestones and issues, and updates them later.
 - Independent PR reviewer agent.
-- Merge policy is a per-project setting (`user` or `agent`).
+- Merge policy is a per-project setting (`user` or `agent`) for PRs into the integration branch; issue PRs inside a sprint are always merged into the sprint branch by the agent.
 - Repo name `agentic-workflow-kit`, public. Kit files contain no personal or project-specific data.
