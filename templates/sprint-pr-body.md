@@ -12,7 +12,7 @@ Closes #<N>
 
 ## Sprint verification
 
-- `<check command>` on the sprint branch: <pass | fail>
+- `<check command>` on the sprint branch: <pass | fail> on `<head-sha>`
 - Verification issue: #<N> — <rows passed> / <rows total>
 
 ## Sprint review

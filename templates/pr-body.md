@@ -4,11 +4,11 @@
 
 Closes #<N>
 
-Plan: <link to the plan comment>
-
 ## Changes
 
 - `<path>` — <one line>
+
+Size: <files> files, +<added> −<removed> lines, <tasks> commits (one per task)
 
 ## Tests
 
@@ -16,16 +16,18 @@ Plan: <link to the plan comment>
 
 ## Checks
 
-- `<check command>`: pass
-- CI: <green | no CI configured>
+- `<check command>` (includes the rules check): pass on `<head-sha>`
+- CI: <green on `<head-sha>` | no CI configured>
 
 ## Evidence
-
-<!-- agentkit:evidence -->
 
 | # | What | Result | Evidence |
 |---|---|---|---|
 | 1 | <behavior> | PASS | <output line, log excerpt, or screenshot link> |
+
+## Follow-ups
+
+- minor — `<file>:<line>` — <problem> — <rule> | none
 
 ## Checks only a person can do
 

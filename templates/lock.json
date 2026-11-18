@@ -1,14 +1,18 @@
 {
-  "kitVersion": "0.1.0",
+  "kitVersion": "0.2.0",
   "tool": "<tool>",
   "models": {
     "thinking": "inherit",
-    "working": "inherit"
+    "working": "inherit",
+    "light": "inherit",
+    "escalation": "thinking"
   },
   "commands": {
     "check": "<check command>",
+    "quick": "<fast check on changed files, for example lint and typecheck of {files}, or empty to use check>",
+    "rules": "<rules command or empty>",
     "test": "<test command> {file}",
-    "format": "<format command or empty>"
+    "format": "<format command for {files}, or empty>"
   },
   "forbiddenCommands": [],
   "git": {
@@ -19,14 +23,26 @@
   },
   "tracker": {
     "kind": "github",
-    "repo": "<owner>/<repo>"
+    "repo": "<owner>/<repo>",
+    "agentLogin": "<login>",
+    "reviewerLogin": "<login, same as agentLogin unless a separate reviewer account is used>"
   },
   "merge": "user",
   "limits": {
     "sameErrorRetries": 8,
-    "workerSteps": 60
+    "workerSteps": 60,
+    "taskRounds": 3,
+    "reviewRounds": 3,
+    "sprintFixRounds": 2,
+    "issueChangedLines": 400,
+    "issueFiles": 8,
+    "issueAcceptanceTests": 5,
+    "taskFiles": 3,
+    "smallChangedLines": 50,
+    "smallFiles": 2
   },
   "verifySkill": "verify-<project>",
   "installedFiles": [],
-  "localEdits": []
+  "localEdits": [],
+  "evidenceDir": ".agentkit/evidence"
 }
