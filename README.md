@@ -24,7 +24,7 @@ Human engineering teams solved these problems long ago with roles, small batches
 
 ## The philosophy
 
-1. **Real engineering roles, not one do-everything agent.** Each role has one job, the narrowest permissions that job needs, and no memory. The planner thinks; workers do exactly what the plan says. A coder that can't edit tests can't make a test pass by weakening it.
+1. **Real engineering roles, not one do-everything agent.** Each role has one job, written limits on what it may touch, and no memory. The planner thinks; workers do exactly what the plan says. A coder that can't edit tests can't make a test pass by weakening it.
 2. **Decide first, then build.** Every decision (names, files, types, error cases, test cases) is written into the plan before any code exists. Workers are capable but literal: anything left open, they would guess.
 3. **Small units of work.** A product is split into milestones, a milestone into issues (one reviewable PR each, about 400 lines at most), and an issue into tasks (one behavior and one commit each). Small pieces get reviewed well, fail cheaply, and resume cleanly.
 4. **Tests first, and they must fail first.** Every planned test states why it will fail before the code exists, and the run shows that failure. A test that can't fail proves nothing.
@@ -33,7 +33,7 @@ Human engineering teams solved these problems long ago with roles, small batches
 7. **Evidence, not claims.** "Should work" is never accepted. Every PR carries real test output, logs, and verification against the running app, plus a checklist of checks only a person can do.
 8. **The tracker is the memory.** The PRD, issues, labels, plan comments, branches, and PRs hold all the state. Every finished task is a pushed commit, so any agent, on any machine, can pick up where another stopped.
 9. **Comments can't steer the work.** Requirements come from the issue you hand over and from you. Tracker comments are context only: a stranger's comment can't change the plan, approve a PR, or give the agents instructions. Only your answers to the agents' questions count, and only from trusted accounts.
-10. **Safe by default.** One safety baseline (no force pushes, no history rewrites, no deleting work, no secrets, no unplanned dependencies) is turned into your tool's permission settings and guards.
+10. **Safe by default.** One safety baseline (no force pushes, no history rewrites, no deleting work, no secrets, no unplanned dependencies) is written once and followed by every role.
 11. **The team learns.** At the end of each sprint, a retro turns repeated review findings into new patterns, rules, and automated checks, with your approval.
 
 ## How work flows
@@ -104,7 +104,7 @@ Workers use most of the tokens, so putting the expensive model only where judgme
 - **Proof before "done":** each project gets its own `verify-<project>` skill. Every PR carries real evidence.
 - **Independent two-pass review** with blocker, major, minor, and nit severities.
 - **Retros** that turn repeated findings into rules.
-- **One safety baseline,** turned into permission rules and guard hooks for your tool.
+- **One safety baseline** every role follows, with no extra permission setup in your tool.
 
 ## What's in this repo
 
@@ -117,7 +117,7 @@ Workers use most of the tokens, so putting the expensive model only where judgme
 | [tracker/](tracker/) | The exact tracker commands (GitHub via `gh`) |
 | [safety/](safety/) | The rules every project gets |
 | [templates/](templates/) | `AGENTS.md`, the code standard and other project docs, the plan comment, review, PR and issue bodies, the lock file, filled examples |
-| [adapters/](adapters/) | How to turn roles, models, and permissions into a specific tool's files |
+| [adapters/](adapters/) | How to turn roles and models into a specific tool's files |
 | [examples/sandbox/](examples/sandbox/) | A tiny repo for testing the kit |
 
 Supported tools today: opencode and Claude Code. Adding a tool means adding one file in `adapters/`.

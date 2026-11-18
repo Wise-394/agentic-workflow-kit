@@ -79,7 +79,7 @@ Build the full change list and show it, then wait for a yes:
 1. **Rules.** Write `AGENTS.md` from [templates/AGENTS.md](templates/AGENTS.md), filled in with the detected and answered values. If one exists, merge: keep every existing rule, map it into the template's sections, and drop only what the kit now covers (status templates, file-based ticket flow), as shown in the preview.
 2. **Docs.** For each of `docs/testing.md`, `docs/patterns.md`, `docs/clean-code.md`: if the project has an equivalent, keep it, point to it from `AGENTS.md`, and show the user which sections of the kit's template it lacks (offer to add them). Otherwise write the template, filled in from the real repo and the step 3 answers (a real pattern file per row, the real test runner, the real layer table). Leave out rows you can't fill; never leave `<placeholder>` text behind.
 3. **Rules check.** Set up the rules the user picked in step 3.8 with [skills/rules-check/SKILL.md](skills/rules-check/SKILL.md), set `commands.rules`, and mark those rows **(checked)** in `docs/clean-code.md`.
-4. **Agents, models, permissions, skills.** Follow the chosen adapter file in `adapters/` exactly. It turns `roles/`, the model answers, [safety/baseline.md](safety/baseline.md) plus `forbiddenCommands`, and `skills/` into the tool's own files.
+4. **Agents, models, skills.** Follow the chosen adapter file in `adapters/` exactly. It turns `roles/`, the model answers, and `skills/` into the tool's own files. The kit writes no permission rules or hooks; [safety/baseline.md](safety/baseline.md) and `forbiddenCommands` are rules the agents follow.
 5. **Tracker.** Run ensure-labels for every label in [tracker/github.md](tracker/github.md).
 6. **Lock file.** Write `.agentkit/lock.json` from [templates/lock.json](templates/lock.json), with `tracker.agentLogin` from step 1 (and `tracker.reviewerLogin` the same unless the user set up a separate reviewer account). Add `.agentkit/evidence/` to `.gitignore`. Fill `installedFiles` with every file you created or changed, each with the sha256 of the content you wrote (`sha256sum <file>`). `UPDATE.md` uses these hashes to tell your files apart from the user's later edits.
 7. **Migration**, if the user said "now" in step 3.9: for each open ticket file, create an issue from [templates/issue.md](templates/issue.md) under a milestone named after its sprint, then show the user the mapping. Don't delete the old files; tell the user they are no longer used.
@@ -99,7 +99,6 @@ Run each check and report one line per row:
 | Labels exist | `gh label list --search "status:"` |
 | Roles reachable | The adapter's role list check |
 | No leftover placeholders | `grep -rnE '<[^!/ >][^>]*>' AGENTS.md docs/ .agentkit/lock.json` shows nothing except real markup |
-| Guards work | The adapter's guard test, if it has one |
 
 ## 7. Next steps
 

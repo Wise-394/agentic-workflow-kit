@@ -21,7 +21,7 @@ For every path in `installedFiles`, compare its current sha256 with the recorded
 | Different hash | No | Leave it; record it under `localEdits` |
 | Missing (user deleted) | Either | Ask whether to restore it; default no |
 
-New kit files that the project doesn't have yet are added. Generated files (agents, permissions, hooks, skills) are generated again through the adapter with the saved answers, then classified the same way.
+New kit files that the project doesn't have yet are added. Generated files (agents, model config, skills) are generated again through the adapter with the saved answers, then classified the same way.
 
 **Project docs are never regenerated.** `AGENTS.md`, `docs/clean-code.md`, `docs/patterns.md`, and `docs/testing.md` were filled from the project's own code and the user's answers, and the user owns them. For each one, compare the kit's template in the old version with the template in the new version. Every section the new template adds or changes becomes a proposed edit to the project's doc, filled in from the real repo the same way setup does, and shown as a diff. Nothing is replaced.
 

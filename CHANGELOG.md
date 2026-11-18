@@ -21,7 +21,8 @@ Code quality and smaller units of work.
 - **Loops have exits:** `limits.taskRounds` and `limits.sprintFixRounds`, a **Counters** section in the plan, and a re-review whenever the head moves after an approval. Merges use `--match-head-commit`.
 - **Tests:** the plan lists **Existing test changes** (mechanical or assertion), so renames and signature changes no longer stall; tasks list their test files.
 - **Review:** the reviewer reads the issue without the plan comment; security and correctness defects are blockers even when no requirement names them (new clean-code section 9).
-- **Safety:** pushing to the integration or default branch, refspec deletes, `gh api` DELETE and merge/ref calls, `--admin`, global git config, and download-and-run package runners are forbidden; the Claude Code guard checks a PR's base before allowing a merge, path guards cover shell writes, and secrets are denied at any depth.
+- **Safety:** pushing to the integration or default branch, refspec deletes, `gh api` DELETE and merge/ref calls, `--admin`, global git config, and download-and-run package runners are forbidden; and secrets are off limits at any depth.
+- **No generated permissions:** the adapters no longer write permission rules, guard hooks, or per-role tool limits. Subagents run with the session's own permissions; role limits and the safety baseline are written rules.
 - **Evidence** lives in the PR body only, with the head sha the checks ran on; verifier output goes to the git-ignored `.agentkit/evidence/`.
 - **Without a PRD:** requirement IDs are optional; issues outside the PRD name their tests `#<N>:`. Investigations clear their blockers once findings are posted.
 - **Update** never regenerates project docs; it proposes template changes as diffs, lists every new 0.2.0 question, and handles plans in flight.

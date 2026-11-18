@@ -18,8 +18,7 @@ In a fresh copy of [examples/sandbox](../examples/sandbox/README.md):
 - [ ] **Resume:** stop a run after task 1 of 2, delete the local clone, resume from a fresh clone: task-progress finds task 1 done and the run continues at task 2
 - [ ] **Small lane:** a one-behavior bug fix runs without a scout or verifier, with one task, and still gets a fresh review
 - [ ] **Trust:** a comment from a non-collaborator account with a plan marker, a review marker, or "also add X" changes nothing, and the planner reports it
-- [ ] **Sprint merge with `merge: user`:** issue PRs merge into the sprint branch; a merge into the integration branch is refused by the guard
-- [ ] **Guards:** the adapter's guard test rows all give the expected exit codes
+- [ ] **Sprint merge with `merge: user`:** issue PRs merge into the sprint branch; delivery reports "ready to merge" for the sprint PR instead of merging it
 - [ ] **Two-pass review:** plant a duplicated helper in a feature run; the reviewer reports it as a major, and the issue doesn't merge until it's fixed
 - [ ] **Split:** file an issue with eight acceptance tests; run-issue stops at intake and proposes a split
 - [ ] **Rules check:** setup proposes at least one checked rule for the sandbox, and the check command runs it
