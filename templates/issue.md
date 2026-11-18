@@ -18,6 +18,6 @@
 
 ## Checks only a person can do
 
-- <for example: "on a real phone, the timer keeps running after the screen locks"> | none
+- <for example: "on a real phone, the upload finishes after the screen locks"> | none
 
 Blocked by #<N>
