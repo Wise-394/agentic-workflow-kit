@@ -186,3 +186,13 @@ Projects add rules in `AGENTS.md` and `forbiddenCommands`. Adapters translate ba
 - Independent PR reviewer agent.
 - Merge policy is a per-project setting (`user` or `agent`) for PRs into the integration branch; issue PRs inside a sprint are always merged into the sprint branch by the agent.
 - Repo name `agentic-workflow-kit`, public. Kit files contain no personal or project-specific data.
+
+## 14. Facts found while building 0.1.0
+
+- **Closing issues:** GitHub's `Closes #N` only works when a PR merges into the default branch. When the integration branch isn't the default branch, delivery closes the issue directly after confirming the merge. This is the single allowed hand-close (see `tracker/github.md`).
+- **Own-PR approval:** GitHub rejects approving a PR from the account that opened it. The reviewer falls back to a comment review whose first line is `<!-- agentkit:review verdict=… sha=… -->`, and that marker counts as the review.
+- **Sprint draft PR:** GitHub refuses a PR with no commits, so the sprint branch starts with an empty commit.
+- **No CI:** when a repo has no CI, the check command's result on the PR head commit in the evidence section stands in for green CI.
+- **Claude Code:** subagents can't start subagents, so the planner runs as the main session through the `run-issue` and `run-sprint` skills. Per-role edit limits that the tool can't express are enforced by role instructions and re-checked by the pr-reviewer.
+- **Updates:** `installedFiles` in the lock file records a sha256 per written file, so `UPDATE.md` can tell kit-generated content from the user's edits.
+- **Kit test:** `scripts/check-kit.sh` checks required files, skill frontmatter, tool or model names in generic files, placeholders, and links.
