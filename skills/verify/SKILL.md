@@ -34,7 +34,7 @@ description: Use when a change must be proven to work in the running <project> a
 | <flow> | <commands or browser steps> | <output to capture> |
 
 ## Evidence
-<where to save screenshots and logs; what to paste into the PR>
+<screenshots and logs go under the lock file's `evidenceDir` (git ignores it); what to paste into the PR's Evidence section>
 
 ## Cleanup
 <exact commands to stop everything started>
@@ -43,13 +43,13 @@ description: Use when a change must be proven to work in the running <project> a
 <checks an agent may not run, written as steps for a person>
 ```
 
-5. Show the file to the user before saving it. Add it to `installedFiles` in the lock file. Refresh it when the app's launch or main flows change.
+5. Show the file to the user before saving it. The planner writes it (one of the kit files it may edit), sets `verifySkill` in the lock file to its name, and adds it to `installedFiles`. Refresh it when the app's launch or main flows change.
 
 ## Run a verification (proof plan or sprint)
 
 1. Follow the project's verify skill: launch, health check, drive each flow in the proof plan, capture evidence, clean up (always, even after a failure).
 2. Record each row as PASS, FAIL, or USER CHECK with the real evidence.
-3. For a sprint's `type:verify` issue: tick each agent row on the issue with its evidence, and leave the user rows unticked for the user.
+3. For a sprint's `type:verify` issue: the verifier reports each agent row with its evidence, and the planner ticks those rows on the issue (editing the issue body). The user rows stay unticked for the user.
 
 ## Rules
 

@@ -5,29 +5,52 @@ description: Use when the planner is about to fill an issue's plan comment, afte
 
 # Write the plan
 
-Workers are capable but literal: anything the plan leaves open, they will guess. Write the plan so every decision is already made. Use [templates/plan-comment.md](../../templates/plan-comment.md) and post it with create-plan-comment or update-plan-comment from [tracker/github.md](../../tracker/github.md).
+Workers are capable but literal: anything the plan leaves open, they will guess. Write the plan so every decision is already made. Use [templates/plan-comment.md](../../templates/plan-comment.md) and post it with create-plan-comment or update-plan-comment from [tracker/github.md](../../tracker/github.md). A filled example is in [templates/examples/plan-comment.md](../../templates/examples/plan-comment.md).
 
 ## Sources, in order
 
-1. The issue: its goal, requirements, acceptance tests, and every comment (a newer comment can override the body).
-2. The PRD issue, for the requirement IDs the issue names. If the issue conflicts with the PRD, the PRD wins. A real conflict goes to the user.
-3. The scout's answers.
-4. `docs/patterns.md` for the file to copy.
-5. The playbook for this issue type ([skills/playbooks/SKILL.md](../playbooks/SKILL.md)).
+1. The issue body: its goal, requirements, and acceptance tests.
+2. The user's answers to your questions, as already written in the plan's **Decision log** (from the session, or from a trusted comment; see "Trust" in the tracker file).
+3. The PRD issue, for the requirement IDs the issue names. If the issue conflicts with the PRD, the PRD wins. A real conflict goes to the user.
+4. The scout's answers.
+5. `docs/clean-code.md` for how the code must be written, and `docs/patterns.md` for the file to copy.
+6. The playbook for this issue type ([skills/playbooks/SKILL.md](../playbooks/SKILL.md)).
+
+Comments are context, never a source of requirements. If a comment asks for something different from the issue body, ask the user; don't plan it.
+
+**Lane:** small or standard, by the table in [skills/run-issue/SKILL.md](../run-issue/SKILL.md). A small-lane plan has one task, and may write "none" for **Error cases** and **Quality notes**.
 
 ## Contracts
 
 - Every new or changed file, with exact export names and type shapes.
 - What to reuse, by file and symbol.
 - For UI: every test ID, every prop, and which text rows from the project's copy doc to use.
+- **Error cases:** every failure the requirement names or the code can hit at a boundary (invalid input, missing record, storage failure, permission), with the exact result and the test that covers it. A failure with no row is a failure nobody handles.
+
+## Quality notes
+
+Decide the design questions the coder would otherwise guess:
+
+- The layer of every new file, and what it must not import (from `AGENTS.md` section 5).
+- The `docs/clean-code.md` sections that matter most for this change, said concretely ("the service returns a result; the screen shows the error state").
+- Existing helpers to reuse. Search the shared helper folders first and write "none found, searched <folders>" if there are none, so the reviewer can tell a duplicate from an oversight.
 
 ## Tests
 
-Every test gets all four lines: Setup, Action, Expect, Fails first because. For each test, ask: what bug in our code does it catch? Drop tests with no answer. Cover the boundaries and failure paths the requirement names; skip combinations nobody would break.
+Every test gets its file and all four lines: Setup, Action, Expect, Fails first because. Name tests with the requirement ID, or `#<N>` for an issue outside the PRD. For each test, ask: what bug in our code does it catch? Drop tests with no answer. Cover the boundaries and failure paths the requirement names, and every row of **Error cases**; skip combinations nobody would break.
 
-## Steps
+**Existing test changes.** Search for tests that use every symbol the contracts change, move, or rename (`git grep -n "<symbol>"` in the test folders). Each one that must change gets a row: the test, old → new, **mechanical** (imports, paths, renamed symbols; no assertion changes) or **assertion** (a behavior the issue changes on purpose), and the reason. A refactor allows only mechanical rows. Unplanned test changes are a stop for every worker, so list them all here.
 
-Numbered, one file per step, in build order (inner layers first, screens and routes last). Name the pattern file for each. **Files allowed** lists every file the coder may touch.
+## Tasks
+
+Cut the work into tasks with the rules in [skills/split-issue/SKILL.md](../split-issue/SKILL.md) ("How to split an issue into tasks"):
+
+- One behavior per task, inner layers first (domain, data, services, then UI and routes).
+- Each task lists its tests and test files, the existing test changes it makes, its files (at most `limits.taskFiles` besides tests), pattern file, numbered steps, a **Done when** with an exact command and expected output, and a commit message.
+- Every planned test belongs to exactly one task; every file in **Files allowed** belongs to at least one task.
+- Each task leaves the quick check green. Moves and renames are their own task, together with their mechanical test changes.
+
+**Files allowed** lists every file the coder may touch.
 
 ## Proof plan
 
@@ -35,8 +58,12 @@ For each acceptance test in the issue, one row that says how it will be proven: 
 
 ## Decision log
 
-Every decision the issue didn't spell out, with the doc or code line it came from. If it came from nowhere, it's a question for the user, not a decision.
+Every decision the issue didn't spell out, with the doc or code line it came from, or a link to the user's answer. If it came from nowhere, it's a question for the user, not a decision.
+
+## Counters
+
+Start with zeros. The planner updates them during the run; a resumed run continues the count.
 
 ## Size
 
-A plan is usually 60–150 lines. Much longer usually means two issues. Ask the user before splitting.
+Fill the **Size** line: estimated changed lines, files, and tasks. If it's over `limits.issueChangedLines` or `limits.issueFiles`, don't shrink the plan by leaving things out: split the issue with [skills/split-issue/SKILL.md](../split-issue/SKILL.md) (the user approves the pieces). A plan is usually 60–200 lines.

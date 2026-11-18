@@ -1,5 +1,7 @@
 # Agentic Workflow Kit Implementation Plan
 
+> **Historical.** This document describes version 0.1.0 as first designed (two model tiers, plans with **Steps**). The current behavior is in the kit's own files and [CHANGELOG.md](../../CHANGELOG.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build version 0.1.0 of the kit described in the spec and publish it as a public GitHub repo.

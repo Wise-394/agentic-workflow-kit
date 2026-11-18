@@ -1,5 +1,7 @@
 # Agentic Workflow Kit — Design
 
+> **Historical.** This document describes version 0.1.0 as first designed (two model tiers, plans with **Steps**). The current behavior is in the kit's own files and [CHANGELOG.md](../../CHANGELOG.md).
+
 Date: 2026-11-18
 Status: Draft, awaiting review
 
