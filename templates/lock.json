@@ -1,0 +1,32 @@
+{
+  "kitVersion": "0.1.0",
+  "tool": "<tool>",
+  "models": {
+    "thinking": "inherit",
+    "working": "inherit"
+  },
+  "commands": {
+    "check": "<check command>",
+    "test": "<test command> {file}",
+    "format": "<format command or empty>"
+  },
+  "forbiddenCommands": [],
+  "git": {
+    "integrationBranch": "<branch>",
+    "defaultBranch": "<branch>",
+    "branchPattern": "<type>/<issue>-<slug>",
+    "sprintBranchPattern": "sprint/<milestone-slug>"
+  },
+  "tracker": {
+    "kind": "github",
+    "repo": "<owner>/<repo>"
+  },
+  "merge": "user",
+  "limits": {
+    "sameErrorRetries": 8,
+    "workerSteps": 60
+  },
+  "verifySkill": "verify-<project>",
+  "installedFiles": [],
+  "localEdits": []
+}
