@@ -1,0 +1,9 @@
+{
+  "name": "agentkit",
+  "description": "Agentic workflow kit: plan a product with your agent, then let a small team of fresh subagents build it issue by issue, with tests first, independent review, and evidence. State lives in your GitHub tracker.",
+  "author": { "name": "wise-394" },
+  "homepage": "https://github.com/wise-394/agentic-workflow-kit",
+  "repository": "https://github.com/wise-394/agentic-workflow-kit",
+  "license": "MIT",
+  "keywords": ["workflow", "agents", "tdd", "code-review", "github"]
+}

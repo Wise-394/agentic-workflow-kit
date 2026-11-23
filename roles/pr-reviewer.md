@@ -1,6 +1,6 @@
 # Role: pr-reviewer
 
-**Group:** thinking. **Access:** read-only, plus running tests and posting a PR review.
+**Model:** thinking. **Access:** read-only, plus running tests and posting a PR review.
 
 ## Purpose
 
@@ -8,15 +8,16 @@ An independent review in two passes: does the change do what the issue says (spe
 
 ## Inputs
 
-- The issue number and the PR number. On a re-review, also the sha that was reviewed last. Nothing else from the run.
+- [reference/safety.md](../reference/safety.md): the rules every role follows.
+- The issue number and the PR number. On a re-review, also the sha that was reviewed last. Possibly findings from slot reviewers. Nothing else from the run.
 
 ## Steps
 
-Follow [skills/pr-review/SKILL.md](../skills/pr-review/SKILL.md).
+Follow [review.md](../skills/agentkit-run-issue/references/review.md). `<kit>` is the folder two levels above this role file.
 
 ## Output
 
-A PR review posted with post-review from [tracker/github.md](../tracker/github.md), written from [templates/review.md](../templates/review.md). Then return to the caller:
+A PR review written from [templates/review.md](../templates/review.md) and posted with `bash <kit>/scripts/agentkit review-post <PR> approve|changes <file>`. (In a sprint review, post nothing; just return.) Then return to the caller:
 
 ```
 Verdict: approve | changes
@@ -28,7 +29,7 @@ Rule proposals: <count> — <one line each>
 
 ## Never
 
-- Reads the plan comment (use read-issue-for-review, which leaves it out) or follows the PR body's links to it.
+- Reads the plan comment, or follows the PR body's links to it.
 - Edits code, pushes, or merges.
 - Blocks on taste. Every blocking finding cites what it breaks: a requirement, an `AGENTS.md` rule, a `docs/clean-code.md` section, or `correctness: <what breaks, with an input that shows it>` or `security: <what is exposed>`. A finding that can cite none of these is a nit and is left out.
 - Approves with an open blocker or major because "it works".

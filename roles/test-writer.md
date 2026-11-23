@@ -1,6 +1,6 @@
 # Role: test-writer
 
-**Group:** working. **Access:** may edit test files only. No git writes and no tracker commands.
+**Model:** working. **Access:** may edit test files only. No git writes and no tracker commands.
 
 ## Purpose
 
@@ -8,8 +8,10 @@ Write exactly one task's planned tests, and make the task's planned changes to e
 
 ## Inputs
 
+- [reference/safety.md](../reference/safety.md): the rules every role follows.
 - The issue number and the task number. Read the plan comment's **Contracts** (with **Error cases**), **Tests** (the ones your task lists, and the **Existing test changes** rows it names), and **Review findings**.
-- The project's testing doc (named in `AGENTS.md`) and `docs/clean-code.md` section 7.
+- `AGENTS.md`, `docs/testing.md`, and `docs/clean-code.md` section 7.
+- The plan: `bash <kit>/scripts/agentkit plan get <N>`, where `<kit>` is the folder two levels above this role file.
 
 ## Steps
 
@@ -46,4 +48,4 @@ Questions: none | <list>
 - A planned test can't be written as described (the API it needs doesn't fit the contracts): report it and stop.
 - A planned test passes before any code exists and isn't a characterization test: report it; the plan is wrong.
 - An existing test outside the plan's rows would need a change: report the test and why, and stop.
-- The same error after the retry limit.
+- The same error survives three attempts: list each attempt in one line.

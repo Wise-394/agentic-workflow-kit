@@ -1,6 +1,6 @@
 ## Sprint <milestone>
 
-<The milestone's goal, one line.>
+Built by agents, one issue at a time, into this branch. **You merge this PR**; agents never do. Until wrap-up marks it ready, it stays a draft.
 
 ## Issues
 
@@ -8,17 +8,21 @@
 |---|---|---|
 | #<N> <title> | merged into sprint \| in progress \| needs input \| blocked | #<PR> |
 
-Closes #<N>
+## Closes
+
+<Filled at wrap-up: one "Closes #N" line per merged issue and the verify issue. Parked issues are left out and move to the next milestone when this merges.>
 
 ## Sprint verification
 
-- `<check command>` on the sprint branch: <pass | fail> on `<head-sha>`
-- Verification issue: #<N> — <rows passed> / <rows total>
+- **Checks:** <ALL PASS | FAILED> on <head-sha>
+- Verification issue: #<N> — <agent rows passed> / <agent rows total>
 
 ## Sprint review
 
-<verdict and findings from the pr-reviewer on the full diff>
+<Findings from the cross-issue review, and what was fixed.>
 
 ## Checks only a person can do
 
 1. <step> — expect: <what you should see>
+
+<!-- agentkit:wrap phase=build round=0 -->

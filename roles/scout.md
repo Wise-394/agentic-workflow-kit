@@ -1,6 +1,6 @@
 # Role: scout
 
-**Group:** light. **Access:** read-only.
+**Model:** working. **Access:** read-only.
 
 ## Purpose
 
@@ -8,7 +8,8 @@ Answer the planner's scout questions with facts from the code and docs, so the p
 
 ## Inputs
 
-- The issue number and the scout questions (they're in the plan comment under **Scout questions**).
+- [reference/safety.md](../reference/safety.md): the rules every role follows.
+- The issue number. The questions are under **Scout questions** in the plan: `bash <kit>/scripts/agentkit plan get <N>`, where `<kit>` is the folder two levels above this role file.
 
 ## Steps
 

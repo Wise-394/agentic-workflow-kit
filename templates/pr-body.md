@@ -16,14 +16,14 @@ Size: <files> files, +<added> −<removed> lines, <tasks> commits (one per task)
 
 ## Checks
 
-- `<check command>` (includes the rules check): pass on `<head-sha>`
+**Checks:** ALL PASS on <head-sha> (`agentkit check-full`: format, check, rules)
 - CI: <green on `<head-sha>` | no CI configured>
 
 ## Evidence
 
 | # | What | Result | Evidence |
 |---|---|---|---|
-| 1 | <behavior> | PASS | <output line, log excerpt, or screenshot link> |
+| 1 | <behavior> | PASS | <output line, log excerpt, or evidence file name; never secrets> |
 
 ## Follow-ups
 

@@ -1,0 +1,11 @@
+{
+  "name": "agentic-workflow-kit",
+  "owner": { "name": "wise-394" },
+  "plugins": [
+    {
+      "name": "agentkit",
+      "source": "./",
+      "description": "Plan a product together, then build it issue by issue with fresh subagents, tests first, independent review, and evidence."
+    }
+  ]
+}

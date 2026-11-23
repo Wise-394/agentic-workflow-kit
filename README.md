@@ -1,154 +1,145 @@
-# Agentic Workflow Kit
+# agentkit
 
-**A software team made of coding agents, run the way a good engineering team works.**
+**Plan your product with your coding agent. Then a small team of agents builds it, issue by issue, with tests, reviews, and a merge you approve.**
 
-The kit turns your coding agent into a small engineering team: a planner who owns decisions, a scout who reads the code, a test-writer, a coder, a checker, a verifier, a delivery engineer, and an independent reviewer. Together they take a product idea through a PRD, sprints, issues, and small tasks, and deliver reviewed, tested, verified pull requests that meet a written code standard.
-
-It is plain markdown that an agent follows. It doesn't depend on one tool or one model, and it keeps all of its state in your issue tracker.
-
-> Read https://github.com/wise-394/agentic-workflow-kit and follow SETUP.md to set it up in this project.
-
----
-
-## Why this exists
-
-One agent in one long chat can write a lot of code quickly. Left alone, it also:
-
-- **guesses** names, files, and product decisions instead of finding or asking;
-- **grades its own work**, and calls it done because it believes it is;
-- **drifts** away from the codebase's patterns, duplicating helpers and putting logic in the wrong layer;
-- **takes on too much at once**, producing PRs too big for anyone to review properly;
-- **forgets** everything when the session ends.
-
-Human engineering teams solved these problems long ago with roles, small batches, tests first, code review, coding standards, and a definition of done. The kit applies the same practices to agents.
-
-## The philosophy
-
-1. **Real engineering roles, not one do-everything agent.** Each role has one job, written limits on what it may touch, and no memory. The planner thinks; workers do exactly what the plan says. A coder that can't edit tests can't make a test pass by weakening it.
-2. **Decide first, then build.** Every decision (names, files, types, error cases, test cases) is written into the plan before any code exists. Workers are capable but literal: anything left open, they would guess.
-3. **Small units of work.** A product is split into milestones, a milestone into issues (one reviewable PR each, about 400 lines at most), and an issue into tasks (one behavior and one commit each). Small pieces get reviewed well, fail cheaply, and resume cleanly.
-4. **Tests first, and they must fail first.** Every planned test states why it will fail before the code exists, and the run shows that failure. A test that can't fail proves nothing.
-5. **Code quality is a standard, not a taste.** Each project gets a written code standard (modular layers, readable functions, reuse without speculative abstraction, explicit types and errors, repeatable tests, clean hygiene). The rules that a tool can check run in the check command; the rest are checked in review with a severity scale.
-6. **Independent review.** The reviewer is a fresh agent that sees only the issue and the diff, never the builder's reasoning, so its judgment isn't anchored. It checks spec compliance first, then code quality.
-7. **Evidence, not claims.** "Should work" is never accepted. Every PR carries real test output, logs, and verification against the running app, plus a checklist of checks only a person can do.
-8. **The tracker is the memory.** The PRD, issues, labels, plan comments, branches, and PRs hold all the state. Every finished task is a pushed commit, so any agent, on any machine, can pick up where another stopped.
-9. **Comments can't steer the work.** Requirements come from the issue you hand over and from you. Tracker comments are context only: a stranger's comment can't change the plan, approve a PR, or give the agents instructions. Only your answers to the agents' questions count, and only from trusted accounts.
-10. **Safe by default.** One safety baseline (no force pushes, no history rewrites, no deleting work, no secrets, no unplanned dependencies) is written once and followed by every role.
-11. **The team learns.** At the end of each sprint, a retro turns repeated review findings into new patterns, rules, and automated checks, with your approval.
-
-## How work flows
+agentkit is a plugin for coding agents such as Claude Code, opencode, and Codex. You install it once and drop it into any repository, even an empty one. It is plain markdown skills plus one bash script. It keeps no state of its own: the plan lives in your repo and the work lives in GitHub issues, so any session on any machine can pick up where the last one stopped.
 
 ```mermaid
-flowchart TD
-    Idea([Your idea]) --> PRD[PRD issue<br/>requirements with IDs]
-    PRD --> M1[Milestone = sprint]
-    M1 --> I1[Issue = one PR<br/>acceptance tests, size limits]
-    I1 --> P[Plan comment<br/>contracts, error cases, tests, tasks]
-    P --> T1[Task = one commit<br/>one behavior]
-    T1 --> R[Red: test-writer<br/>tests fail for the planned reason]
-    R --> G[Green: coder<br/>code to the standard]
-    G --> C[Checker<br/>quick check, then commit and push]
-    C --> TR[Planner task review<br/>spec + quality]
-    TR -->|next task| T1
-    TR --> FC[Checker<br/>full check on the branch]
-    FC --> V[Verifier<br/>runs the real app, collects evidence]
-    V --> PR[Pull request with evidence]
-    PR --> RV[Fresh pr-reviewer<br/>spec pass, then quality pass]
-    RV -->|blocker or major| T1
-    RV -->|approved| MG[Merge]
-    MG --> SV[Sprint verification<br/>and sprint review]
-    SV --> RT[Retro<br/>findings become rules]
+flowchart LR
+    P[Plan together<br/>PRD, design, issues] --> B[M0 bootstrap<br/>skeleton, CI, docs]
+    B --> I[Agents build<br/>one issue at a time]
+    I -->|needs a decision| Q[Question on the issue<br/>you reply]
+    Q --> I
+    I --> W[Sprint wrap-up<br/>verify, review, retro]
+    W --> M[You merge<br/>the sprint PR]
+    M --> I
 ```
 
-### 1. Plan the product: `plan-project`
+## Quick start
 
-The planner interviews you, one question at a time, and writes a **PRD** as a pinned issue. Each requirement is one testable sentence with an ID (`AUTH-02: When a user signs in with a wrong password, the system shall …`). It cuts **milestones** (milestone 1 is the smallest version a person can actually use) and writes **issues** with acceptance tests, size estimates, and `Blocked by` links. An analyze pass checks that every must-have requirement is covered by some test and that no issue is too big, before anything is created.
+**1. Install** in your coding tool.
 
-### 2. Run a sprint: `run-sprint`
+| Tool | Install |
+|---|---|
+| Claude Code | `/plugin marketplace add wise-394/agentic-workflow-kit`<br/>`/plugin install agentkit@agentic-workflow-kit` |
+| opencode | Clone and link the skills: [adapters/opencode.md](adapters/opencode.md) |
+| Codex | Clone and link the skills: [adapters/codex.md](adapters/codex.md) |
 
-Name a milestone. The kit creates a `sprint/<milestone>` branch and a draft PR that shows live progress, sorts the issues so each comes after its blockers, and runs each one. Stuck issues are set aside with their questions, and work continues on everything that doesn't depend on them. At the end come a sprint-wide verification, a review across all issues (duplicate helpers, inconsistent names, crossed layers), a retro, and one PR into your integration branch.
+**2. Set up** a project. Open your agent in the repository and say *"set up agentkit"*. It detects your repo, account, and commands, then asks about the rest: models, which of your installed skills to use, merge preference, and commands agents must never run. It shows every file before writing anything.
 
-### 3. Run one issue: `run-issue`
+**3. Plan.** Say *"plan the project"*. The agent interviews you, pushes back on scope once, and writes `docs/prd.md`, `docs/design.md`, milestones, and issues with acceptance tests. Nothing is created until you approve it.
+
+**4. Build.** Pick how much to hand over:
+
+| You want | Say or run |
+|---|---|
+| Build one issue while you watch | `agentkit-run-issue #12` |
+| See the plan before any code | `agentkit-run-issue #12 --plan-only` |
+| Approve each task as it's built | `agentkit-run-issue #12 --step` |
+| Build a whole milestone in one session | `agentkit-run-sprint M1` |
+| Run unattended, around the clock | Point a runner at `agentkit-next` ([how](#running-unattended)) |
+
+**Requirements:** `git`, the GitHub CLI `gh` logged in, a GitHub repository, and an agent that can run shell commands and start subagents or fresh sessions.
+
+## How an issue gets built
+
+Each issue is built by a team of roles. The thinking-heavy roles get your strongest model; the roles that follow a plan get a cheaper one.
 
 | Step | Who | What happens |
 |---|---|---|
-| Intake | planner | Reads the issue, PRD, and comments; checks blockers and the Definition of Ready; proposes a split if it's too big |
-| Scout | scout | Answers fact questions from the code: existing names, helpers, patterns, with `file:line` |
-| Plan | planner | Writes the plan comment: contracts, error cases, quality notes, tests, tasks, proof plan |
-| Build, per task | test-writer → coder → checker → planner | Red, green, quick check and commit, task review. Fresh workers for every task |
-| Verify | checker, verifier | The full check once on the branch; then the verifier drives the real app with the project's `verify-<project>` skill and records evidence |
-| Pull request | delivery | Opens the PR with the real check and verification output |
-| Review | pr-reviewer | A fresh agent: spec compliance, then code quality. Blockers and majors go back to the build loop |
-| Merge | delivery | Only if your merge policy allows it and every merge condition holds |
+| Intake | planner | Checks the issue is trusted, ready, and small enough. Splits it or asks you if not |
+| Scout | scout | Finds the existing names, helpers, and patterns, with `file:line` |
+| Plan | planner | Writes contracts, error cases, tests, and tasks into one plan comment on the issue |
+| Build | test-writer, coder | Per task: a failing test first, then the code. Fresh agents for every task |
+| Check | `agentkit check-task` | The script runs format, tests, and checks, then commits |
+| Verify | verifier | Proves the change in the running app, following `docs/verify.md` |
+| Review | your review skill (optional), then pr-reviewer | Spec compliance, then code quality. Blockers come back as fix tasks |
+| Merge | `agentkit merge` | Into the sprint branch, only with an approval on the exact head commit and passing checks |
 
-## The right model for each job
+When every issue in a milestone is merged, wrap-up runs a sprint-wide check, a cross-issue review, and a retro that proposes new rules. Then the sprint PR is marked ready, and **you merge it**. Agents never merge a sprint into your main line.
 
-Not every role needs the strongest model. The kit groups roles into three tiers. During setup you choose the model for each tier yourself; the kit only suggests one, and you can use any model, or the same model everywhere:
+**Model tiers.** *thinking* (planner, pr-reviewer) makes the decisions and judges quality. *working* (scout, test-writer, coder, verifier) carries them out. A stuck task gets one retry on the thinking model before you're asked.
 
-| Tier | Roles | Why |
+## Bring your own skills
+
+agentkit orchestrates; it doesn't rebuild what good skills already do. During setup it lists the skills you have installed and suggests one for each slot. You can also keep the kit's own step.
+
+| Slot | Good fillers | Without one |
 |---|---|---|
-| **thinking** (strongest model) | planner, pr-reviewer | Orchestration, design decisions, splitting work into tasks, and judging quality. A mistake here spreads to every task. |
-| **working** (mid-tier model) | test-writer, coder, verifier | They follow a plan that has already made the hard decisions, with exact names, contracts, and tests. |
-| **light** (fastest, cheapest model) | scout, checker, delivery | Mechanical work: finding facts in the code, running commands and copying their output, git and tracker steps. |
+| `review` | Your tool's code-review skill | The kit's pr-reviewer alone. It always runs and has the final say |
+| `qa` | A browser-testing or QA skill | `docs/verify.md` |
+| `securityReview` | A security-review skill | The security section of your code standard |
 
-Workers use most of the tokens, so putting the expensive model only where judgment matters cuts cost a lot without lowering quality. When a worker gets stuck on a task and the plan is right, the planner can retry that task once on a stronger model before asking you.
+## Talking to the agents
 
-## What you get
+- **Questions.** When an agent needs a decision, it posts a question on the issue, labels it `status:needs-input`, and moves on to other work. Reply in a comment; the next run picks it up.
+- **Pausing.** Label any open issue `agentkit:pause` (works from your phone) to stop unattended runs. Close that issue to resume.
+- **Changing the plan.** Say *"update the plan"*. The agent revises the docs and issues through a PR you approve.
 
-- **A small-change lane:** a one-behavior change of up to about 50 lines skips the scout, the long plan, and the verifier when its test is the proof, but keeps test-first and the independent review.
-- **Two run modes:** `run-issue` (one issue to a reviewed, verified PR) and `run-sprint` (a whole milestone to one verified sprint PR).
-- **Project planning:** `plan-project` turns an idea into a PRD, milestones, and issues, and updates them when things change.
-- **A code standard per project:** `docs/clean-code.md`, filled from your real code, with a severity scale for review, plus `docs/patterns.md` (the best existing file to copy for each kind of file) and `docs/testing.md`.
-- **A rules check:** the standard's mechanical rules (layer boundaries, function size, forbidden imports, unused code) enforced by your linter or a small script inside the check command.
-- **Sizing and splitting:** hard size limits for issues and tasks, a Definition of Ready and a Definition of Done, and a procedure for splitting work into vertical slices.
-- **Proof before "done":** each project gets its own `verify-<project>` skill. Every PR carries real evidence.
-- **Independent two-pass review** with blocker, major, minor, and nit severities.
-- **Retros** that turn repeated findings into rules.
-- **One safety baseline** every role follows, with no extra permission setup in your tool.
+## Running unattended
 
-## What's in this repo
+agentkit does **one unit of work per session**, then stops and prints a result line:
 
-| Folder | What it holds |
+```
+AGENTKIT_RESULT {"outcome":"merged","issue":12,"note":"","at":"20261123T101500Z"}
+```
+
+Your runner (cron, CI, a shell loop, or another agent) starts a fresh session, reads the outcome, and decides whether to run again, wait, or notify you. The script checks every outcome against GitHub, so a session can't claim work it didn't do.
+
+```bash
+while true; do
+  claude -p "/agentkit:agentkit-next"   # or the command from your adapter
+  # read .agentkit/last-result.json: run again, wait, or notify
+done
+```
+
+The full contract, with every outcome and what to do about it, is in [reference/orchestrator.md](reference/orchestrator.md).
+
+## Safety
+
+| Layer | What it covers |
 |---|---|
-| [SETUP.md](SETUP.md) | The install flow an agent follows |
-| [UPDATE.md](UPDATE.md) | The update flow: compare versions, show the diff, keep your answers |
-| [roles/](roles/) | The eight agent roles. They name no model and no tool |
-| [skills/](skills/) | Portable `SKILL.md` workflows: run-issue, run-sprint, plan-project, write-plan, split-issue, pr-review, verify, rules-check, retro, playbooks |
-| [tracker/](tracker/) | The exact tracker commands (GitHub via `gh`) |
-| [safety/](safety/) | The rules every project gets |
-| [templates/](templates/) | `AGENTS.md`, the code standard and other project docs, the plan comment, review, PR and issue bodies, the lock file, filled examples |
-| [adapters/](adapters/) | How to turn roles and models into a specific tool's files |
-| [examples/sandbox/](examples/sandbox/) | A tiny repo for testing the kit |
+| **The script** | Exact issue matching, labels, closing finished work so it's never redone, merge rules, a one-runner lock, rescuing a crashed session's work instead of discarding it, and a cap on sessions per issue |
+| **Your tool's permissions** (opt-in in setup) | Refuses force pushes, history rewrites, deletes, direct merges, and reading secrets |
+| **Written rules** | Role boundaries, your code standard, and [reference/safety.md](reference/safety.md). Review catches breaks |
 
-Supported tools today: opencode and Claude Code. Adding a tool means adding one file in `adapters/`.
+For unattended runs, also use a container or VM, a token scoped to one repository, a separate bot account if you can, and branch protection on your integration and default branches.
 
-## Setting it up
+## What ends up in your project
 
-There's no installer. Point your coding agent at this repo:
+| File | What it is |
+|---|---|
+| `.agentkit/config` | Settings: tracker, branches, commands, models, slots, limits |
+| `AGENTS.md` | Facts about your project for every agent session. No workflow instructions; those live in the skills |
+| `docs/prd.md`, `docs/design.md`, `docs/decisions/` | The plan you wrote together |
+| `docs/clean-code.md`, `patterns.md`, `testing.md`, `verify.md` | How code is written, copied, tested, and proven in this project |
+| A few adapter files | Only what your tool needs, for example agent files that pin models |
 
-> Read https://github.com/wise-394/agentic-workflow-kit and follow SETUP.md to set it up in this project.
+**Updating:** update the plugin (or `git pull` your clone), then say *"set up agentkit"* again. It adds what's missing and never overwrites your docs.
 
-The agent looks at your repo and detects the stack, commands, branches, folders, and existing code style. It asks only what it can't work out: which models to use, commands agents must never run, who merges, how strict the code standard should be, and which rules to automate. It shows you every file it will write, and writes nothing until you say yes.
+## Repository layout
 
-### Requirements
+| Path | Contents |
+|---|---|
+| [skills/](skills/) | The five entry skills: `agentkit-setup`, `agentkit-plan`, `agentkit-run-issue`, `agentkit-run-sprint`, `agentkit-next` |
+| [roles/](roles/) | Prompts for scout, test-writer, coder, verifier, and pr-reviewer |
+| [scripts/agentkit](scripts/agentkit) | Every tracker and git write, in bash with `git` and `gh` |
+| [reference/](reference/) | Safety baseline, tracker rules, and the runner contract |
+| [templates/](templates/) | Config, `AGENTS.md`, project docs, and issue, plan, PR, and review bodies |
+| [adapters/](adapters/) | Install and settings for Claude Code, opencode, and Codex |
+| [tests/](tests/) | The kit's own checks; never installed into projects |
 
-- A coding agent that can read files, run shell commands, and start subagents.
-- `git`, plus `gh` logged in to the repo's GitHub account.
+## Contributing
 
-## Updating
+Run both checks before every commit:
 
-> Read https://github.com/wise-394/agentic-workflow-kit and follow UPDATE.md.
+```bash
+tests/check-kit.sh        # structure, links, tool-neutral wording
+tests/agentkit.test.sh    # the script against a fake gh
+```
 
-Your edits to installed files are detected by hash and merged, never silently overwritten.
-
-## Ideas it builds on
-
-The kit combines practices from human engineering teams (small batches, test-driven development, code review with severities, Definitions of Ready and Done, INVEST and vertical slicing) with patterns from agentic workflows: orchestrator and workers, evaluator loops, spec-driven development, state kept outside the context window, and fresh-context review.
-
-## Developing the kit
-
-Run `scripts/check-kit.sh` before every commit, and follow [docs/release-checklist.md](docs/release-checklist.md) before every release.
+[tests/acceptance.md](tests/acceptance.md) is the end-to-end run on a throwaway repository.
 
 ## License
 
-MIT
+See [LICENSE](LICENSE).

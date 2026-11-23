@@ -1,58 +1,86 @@
 # Adapter: Claude Code
 
-How to turn the kit's generic parts into Claude Code files.
+## Install
+
+The repository is a Claude Code plugin marketplace with one plugin, `agentkit`:
+
+```
+/plugin marketplace add wise-394/agentic-workflow-kit
+/plugin install agentkit@agentic-workflow-kit
+```
+
+The skills then appear as `/agentkit:agentkit-setup`, `/agentkit:agentkit-plan`, `/agentkit:agentkit-run-issue`, `/agentkit:agentkit-run-sprint`, and `/agentkit:agentkit-next`, and also trigger from plain requests ("set up the kit", "run issue 12"). Updating the kit is `/plugin update agentkit`; then run agentkit-setup again to reconcile the project.
+
+Claude Code tells a skill its base directory when it loads it, so `<kit>` (two levels above the skill folder) is the plugin's install folder.
 
 ## How the planner runs
 
-In Claude Code, subagents can't start other subagents. So the **planner is the main session**: the user starts work in a normal session with "run issue #12" or "run sprint 2", which loads the `run-issue` or `run-sprint` skill. The other seven roles are subagents the main session starts. Setup, update, verify-skill creation, and retro edits also run in the main session, which can edit files.
+Subagents can't start other subagents, so the **planner is the main session**: it loads agentkit-run-issue, agentkit-run-sprint, or agentkit-next, and starts the roles as subagents. Nothing in `CLAUDE.md` makes a session a planner; only those skills do.
 
-## Files written
+## Files setup writes in the project
 
-| Kit source | Project file |
+| File | Content |
 |---|---|
-| `roles/<role>.md` (all but planner) | `.claude/agents/<role>.md` |
-| `roles/planner.md` | Added to the `run-issue` and `run-sprint` skills as "You are the planner" context, and linked from `CLAUDE.md` |
-| `skills/*` | `.claude/skills/<name>/` (copied as they are, including the playbook files) |
-| the project's verify skill | `.claude/skills/verify-<project>/SKILL.md` |
-| `AGENTS.md` | Project root, plus a `CLAUDE.md` whose content is `@AGENTS.md` (Claude Code reads `CLAUDE.md`; the import keeps one source of rules). If `CLAUDE.md` exists, add the import line to it instead. |
+| `CLAUDE.md` | `@AGENTS.md` (or that line added to an existing `CLAUDE.md`) |
+| `.claude/agents/agentkit-<role>.md` for scout, test-writer, coder, verifier, pr-reviewer | A thin agent that pins the role's model (below) |
+| `.claude/settings.json` | Only if the user said yes to the unattended permission profile |
 
-Kit files that skills and roles link to (`tracker/github.md`, `safety/baseline.md`, `templates/*`) are copied into `.agentkit/kit/` keeping their paths, and the links in the copied roles and skills are rewritten to point there.
-
-## Subagent files
+Thin agent file:
 
 ```markdown
 ---
-name: <role>
-description: <the role's Purpose, one sentence>. Use when the planner hands over <the role's input>.
-model: <the role's tier model (thinking, working, or light), or inherit>
+name: agentkit-<role>
+description: The agentic workflow kit's <role>. Started only by the kit's run-issue and run-sprint skills, never for other work.
+model: <models.working, or models.thinking for pr-reviewer; omit the line for inherit>
 ---
 
-<body of roles/<role>.md, links rewritten>
+You are a worker in the agentic workflow kit. Your caller gives you the path of your role file. Read it first and follow it exactly; it overrides anything else you would normally do.
 ```
 
-| Role | `model` |
-|---|---|
-| scout | light |
-| test-writer | working |
-| coder | working |
-| checker | light |
-| verifier | working |
-| delivery | light (working if `merge` is `agent`) |
-| pr-reviewer | thinking |
+`model` takes an alias (`opus`, `sonnet`, `haiku`), a full model ID, or is left out for `inherit`. Suggested: **thinking** `opus` (also pick it for the main session with `/model`), **working** `sonnet`. Leave out `tools`, so the agents get the session's tools.
 
-Leave out `tools`, so every subagent gets the same tools as the main session.
+**Escalation:** the subagent tool takes a `model` per call. A stuck test-writer or coder task is retried once by starting the same agent with the `thinking` model.
 
-- `model` takes an alias (`opus`, `sonnet`, `haiku`), a full model ID, or `inherit`. Write the user's answer as given. `inherit` uses the main session's model.
-- Typical suggestion for setup's model question (only a suggestion; setup always asks and writes what the user chooses): **thinking** `opus` (the main session runs the planner), **working** `sonnet`, **light** `haiku`. Aliases follow the newest model of each family, so they don't go stale. If the user's plan or budget favors fewer tiers, `sonnet` for both working and light is a safe middle.
-- Escalation: Claude Code's subagent tool accepts a `model` override per call, so the planner retries a stuck test-writer or coder task by starting the same subagent with the `models.escalation` tier's model. Add that instruction to the `run-issue` skill's copy under "You are the planner".
-- Step limit: if the installed version supports a per-subagent turn limit in the frontmatter (check the subagent docs), set it from `limits.workerSteps`. Otherwise the kit's retry and round limits are what bound a worker.
-- The planner's model is whatever the user picks for the main session. Tell them how to set it (`/model`, or `"model"` in `.claude/settings.json`) if the thinking answer isn't `inherit`.
+## Unattended runs
 
-## Permissions
+One session per unit of work, from the project root:
 
-The kit writes no permission rules, hooks, or per-role tool limits. Subagents run with the session's own permissions, and each role's limits (what it may edit, which commands it runs) are the written rules in its role file and in the safety baseline. Leave any existing `.claude/settings.json` untouched.
+```bash
+claude -p "/agentkit:agentkit-next" --permission-mode acceptEdits
+```
 
-## Check after writing
+The session's output ends with the `AGENTKIT_RESULT` line; `.agentkit/last-result.json` holds the same. See [reference/orchestrator.md](../reference/orchestrator.md).
 
-- `/agents` lists the seven subagents with their models.
-- The skills appear in the skill list (`run-issue`, `run-sprint`, `plan-project`, …).
+## Unattended permission profile
+
+Written to `.claude/settings.json` only when the user says yes in setup. It lets a headless session run the project's commands without prompts, and makes the harness itself refuse the most dangerous ones. Check the rule syntax against the permissions docs of the installed version.
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash */scripts/agentkit *)",
+      "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)", "Bash(git show*)",
+      "Bash(git fetch*)", "Bash(git switch*)", "Bash(git merge*)", "Bash(git grep*)",
+      "Bash(gh issue view*)", "Bash(gh pr view*)", "Bash(gh pr diff*)", "Bash(gh api*)",
+      "Bash(<each project command from [commands]>)"
+    ],
+    "deny": [
+      "Bash(git push --force*)", "Bash(git push -f*)", "Bash(git push --delete*)",
+      "Bash(git rebase*)", "Bash(git reset*)", "Bash(git stash*)", "Bash(git clean*)",
+      "Bash(git checkout -- *)", "Bash(git config --global*)", "Bash(git filter-branch*)",
+      "Bash(rm -rf*)", "Bash(sudo*)",
+      "Bash(gh pr merge*)", "Bash(gh repo delete*)", "Bash(gh issue close*)",
+      "Read(**/.env)", "Read(**/.env.*)", "Read(**/*.pem)", "Read(**/*.key)",
+      "Bash(<each command from [forbidden]>)"
+    ]
+  }
+}
+```
+
+The script's own merges and closes go through `bash <kit>/scripts/agentkit`, which the allow rule covers; agents can't reach `gh pr merge` or `gh issue close` directly.
+
+## Check after setup
+
+- `/agents` lists the five `agentkit-*` agents with their models.
+- `/agentkit:agentkit-next` in a test repository prints an `AGENTKIT_RESULT` line.

@@ -1,4 +1,4 @@
-<!-- Issue body template. Used by plan-project, split-issue, and when the user asks for an issue. One issue is one PR; see the size rules in AGENTS.md section 7. -->
+<!-- Issue body template. Used by agentkit-plan, splits, and fix issues. One issue is one PR; size rules are in the agentkit-plan skill's split reference. -->
 
 ## Goal
 
@@ -6,7 +6,7 @@
 
 ## Requirements
 
-- <REQ-ID>: <requirement text, copied from the PRD issue>
+- <REQ-ID>: <requirement text, copied from docs/prd.md>
 
 ## Acceptance tests
 
@@ -14,7 +14,7 @@
 
 ## Read
 
-- <PRD sections, docs, or earlier issues the planner should read first>
+- <docs/prd.md and docs/design.md sections, decisions, or earlier issues the planner should read first>
 
 ## Starting points
 

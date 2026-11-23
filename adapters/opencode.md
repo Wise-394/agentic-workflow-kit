@@ -1,68 +1,78 @@
 # Adapter: opencode
 
-How to turn the kit's generic parts into opencode files. Written against the opencode config format that uses an `agents` map and `provider/model#variant` model IDs. Before writing, run `opencode --version` and check the config schema at https://opencode.ai/config.json. If the installed version uses a different format, follow the installed version's docs and tell the user what you adapted.
+Written against opencode's skills and agents folders. Before writing, run `opencode --version` and check the installed version's docs (https://opencode.ai/docs) for skills, agents, and permissions. If they differ, follow the installed version and tell the user what you adapted.
 
-## Files written
+## Install
 
-| Kit source | Project file |
+Clone the kit once, anywhere outside your projects, and link its skills into opencode's global skills folder:
+
+```bash
+git clone https://github.com/wise-394/agentic-workflow-kit ~/.local/share/agentkit
+mkdir -p ~/.config/opencode/skills
+for s in ~/.local/share/agentkit/skills/agentkit-*; do ln -sfn "$s" ~/.config/opencode/skills/; done
+```
+
+Updating the kit is `git -C ~/.local/share/agentkit pull`; then run agentkit-setup again in each project to reconcile it. `<kit>` is the folder two levels above a skill's real path, so the links resolve to the clone.
+
+## How the planner runs
+
+The session that loads agentkit-run-issue, agentkit-run-sprint, or agentkit-next is the planner; it starts the roles as subagents. Don't make the planner opencode's default agent, and don't mention it in `AGENTS.md`: ordinary sessions stay ordinary.
+
+## Files setup writes in the project
+
+| File | Content |
 |---|---|
-| `roles/planner.md` | `.opencode/agents/planner.md` (`mode: primary`) |
-| other `roles/*.md` | `.opencode/agents/<role>.md` (`mode: subagent`) |
-| models, default agent | `opencode.json` |
-| `skills/*` | `.opencode/skills/<name>/` (copied as they are, including the playbook files) |
-| the project's verify skill | `.opencode/skills/verify-<project>/SKILL.md` |
-| `AGENTS.md` | project root (opencode reads it automatically) |
+| `AGENTS.md` | opencode reads it automatically |
+| `.opencode/agents/agentkit-<role>.md` for scout, test-writer, coder, verifier, pr-reviewer | A thin subagent that pins the role's model |
+| `.opencode/agents/agentkit-test-writer-escalated.md`, `agentkit-coder-escalated.md` | The same, on the `thinking` model, for the one escalation retry. Leave out if `models.escalation = none` |
+| `opencode.json` permission block | Only if the user said yes to the unattended permission profile |
 
-Kit files that skills and roles link to (`tracker/github.md`, `safety/baseline.md`, `templates/*`) are copied into `.agentkit/kit/` keeping their paths, and the links in the copied roles and skills are rewritten to point there.
-
-## Agent files
-
-Each agent file has frontmatter, then the role file's body as its prompt.
+Thin agent file:
 
 ```markdown
 ---
-description: <the role's Purpose, one sentence>
+description: The agentic workflow kit's <role>. Started only by the kit's run-issue and run-sprint skills.
 mode: subagent
+model: <provider/model for the role's tier; omit for inherit>
 ---
 
-<body of roles/<role>.md, links rewritten>
+You are a worker in the agentic workflow kit. Your caller gives you the path of your role file. Read it first and follow it exactly.
 ```
 
-Don't put `model` in agent frontmatter. Models go in `opencode.json`, so changing a model is a one-line edit.
+Suggested models: for each tier, pick from the providers the user has configured (`opencode models`): the strongest for **thinking**, a mid-tier one for **working**. Never write API keys into any file; suggest `{env:…}` if a provider config holds a plain key.
 
-## opencode.json
+## Unattended runs
+
+```bash
+opencode run "Use the agentkit-next skill."
+```
+
+If the installed version can't start subagents in `run` mode, the planner starts each role with its own `opencode run "<role prompt>"` instead: a separate process is just as fresh.
+
+## Unattended permission profile
+
+Added to `opencode.json` only when the user says yes in setup:
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
-  "default_agent": "planner",
-  "agents": {
-    "planner":     { "model": "<thinking model>" },
-    "pr-reviewer": { "model": "<thinking model>" },
-    "scout":       { "model": "<light model>", "steps": 60 },
-    "test-writer": { "model": "<working model>", "steps": 60 },
-    "coder":       { "model": "<working model>", "steps": 60 },
-    "checker":     { "model": "<light model>", "steps": 60 },
-    "verifier":    { "model": "<working model>", "steps": 60 },
-    "delivery":    { "model": "<light model, or working if merge is agent>", "steps": 60 },
-    "test-writer-escalated": { "model": "<escalation tier model>", "steps": 60 },
-    "coder-escalated":       { "model": "<escalation tier model>", "steps": 60 }
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "*": "allow",
+      "git push --force*": "deny", "git push -f*": "deny", "git push --delete*": "deny",
+      "git rebase*": "deny", "git reset*": "deny", "git stash*": "deny", "git clean*": "deny",
+      "git checkout -- *": "deny", "git config --global*": "deny", "git filter-branch*": "deny",
+      "rm -rf*": "deny", "sudo*": "deny",
+      "gh pr merge*": "deny", "gh repo delete*": "deny", "gh issue close*": "deny",
+      "<each command from [forbidden]>": "deny"
+    }
   }
 }
 ```
 
-- A model answer of `inherit` means: leave out `model` for that agent. A subagent with no model uses its parent's.
-- If the user would rather keep model IDs out of the repo, write `"{env:AGENTKIT_THINKING_MODEL}"`, `"{env:AGENTKIT_WORKING_MODEL}"`, and `"{env:AGENTKIT_LIGHT_MODEL}"` and tell them to set those variables. opencode substitutes `{env:…}` in config strings.
-- `steps` comes from `limits.workerSteps` in the lock file.
-- Typical suggestion for setup's model question (only a suggestion; setup always asks and writes what the user chooses): for each tier, pick from the providers the user has configured (`opencode models` lists them): the provider's strongest model for **thinking**, its mid-tier model for **working**, and its small, fast model for **light**. A model with reasoning variants can use a higher `#variant` for thinking and a lower one for the others.
-- Escalation: opencode fixes each agent's model in config, so add two more subagents, `test-writer-escalated` and `coder-escalated`, each with its base role's prompt and the `models.escalation` tier's model. The planner may call one of them once for a stuck task. Leave them out if `models.escalation` is `none`.
-- Never write API keys into any config. If the user's provider config holds a plain key, suggest moving it to `{env:…}`.
+Secrets (`.env*`, keys) can't be denied by path here in every version. Keep them out of the runner's checkout, and rely on the safety baseline.
 
-## Permissions
+## Check after setup
 
-The kit writes no permission rules: no shared rules in `opencode.json` and none in agent frontmatter. Agents run with opencode's own permissions, and each role's limits are the written rules in its role file and in the safety baseline. Leave any existing permission config untouched.
-
-## Check after writing
-
-- Start `opencode` in the project. The planner is the default agent and the other seven (plus the escalated ones) appear as subagents.
-- Ask the planner to list the subagents it can call. It should list exactly those.
+- Starting `opencode` shows the five `agentkit-*` subagents, and the default agent is unchanged.
+- `opencode run "Use the agentkit-next skill."` in a test repository prints an `AGENTKIT_RESULT` line.

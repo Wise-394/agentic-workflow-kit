@@ -1,7 +1,7 @@
 <!-- agentkit:plan -->
 # Plan — #<N> <title>
 
-**Playbook:** <feature | bug-fix | refactor | investigation> · **Lane:** <standard | small> · **Branch:** <branch> · **Base:** <base> · **State:** <scouting | planned | building | verifying | in review | done>
+**Playbook:** <feature | bug-fix | refactor | investigation> · **Lane:** <standard | small> · **Branch:** <branch> · **Base:** <base> · **State:** <scouting | planned | building | verifying | in review | merged | done>
 
 **Size:** about <lines> changed lines in <files> files, <tasks> tasks (limits: <issueChangedLines> lines, <issueFiles> files)
 
@@ -73,7 +73,7 @@ Each task is one behavior and one commit, and leaves the quick check green.
 
 | # | What proves it | How | Who |
 |---|---|---|---|
-| 1 | <behavior> | <test name, verify-skill step, or user action> | agent \| user |
+| 1 | <behavior> | <test name, docs/verify.md recipe, or user action> | agent \| user |
 
 ## Review findings
 

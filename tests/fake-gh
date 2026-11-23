@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# A fake `gh` for offline tests of scripts/agentkit. State lives in JSON files under $FAKE:
+#   issues.json  milestones.json  prs.json  comments/<N>.json  reviews/<PR>.json  graphql/<N>.json
+# Every call is appended to $FAKE/log. Needs jq (tests only; the kit itself doesn't).
+set -euo pipefail
+F="${FAKE:?set FAKE to the fixture folder}"
+echo "gh $*" >> "$F/log"
+
+jqf=""; args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --jq) jqf="$2"; shift 2;;
+    -R) shift 2;;
+    --paginate|--force) shift;;
+    *) args+=("$1"); shift;;
+  esac
+done
+set -- "${args[@]+"${args[@]}"}"
+out() { if [ -n "$jqf" ]; then jq -r "$jqf"; else cat; fi; }
+opt() { # opt <name>: value of --name in the remaining args
+  local want="$1" prev=""; for a in "${args[@]}"; do [ "$prev" = "$want" ] && { printf '%s' "$a"; return; }; prev="$a"; done
+}
+upd() { local f="$1" q="$2"; jq "$q" "$F/$f" > "$F/$f.tmp" && mv "$F/$f.tmp" "$F/$f"; }
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+me() { cat "$F/me" 2>/dev/null || echo agent; }
+
+case "${1:-} ${2:-}" in
+  "auth status") exit 0;;
+  "label create") exit 0;;
+esac
+
+if [ "${1:-}" = api ]; then
+  shift; method=GET; path=""; prev=""; body=""
+  for a in "$@"; do
+    case "$prev" in -X) method="$a";; -F|-f) case "$a" in body=@*) body="$(cat "${a#body=@}")";; body=*) body="${a#body=}";; esac;; esac
+    case "$a" in repos/*|graphql) path="$a";; esac
+    prev="$a"
+  done
+  case "$path" in
+    graphql) n="$(printf "%s\n" "$@" | sed -n "s/^n=//p")"; { cat "$F/graphql/$n.json" 2>/dev/null || echo '{"data":{"repository":{"issue":{"lastEditedAt":null,"timelineItems":{"nodes":[]}}}}}'; } | out; exit 0;;
+  esac
+  IFS=/ read -r _ _ _ kind a b <<< "$path"
+  case "$kind/${a:-}/${b:-}" in
+    issues/comments/*)
+      id="${b}"
+      if [ "$method" = PATCH ]; then
+        for f in "$F"/comments/*.json; do jq --arg id "$id" --arg b "$body" 'map(if (.id|tostring) == $id then .body = $b else . end)' "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done
+      else
+        cat "$F"/comments/*.json 2>/dev/null | jq -s --arg id "$id" 'add | map(select((.id|tostring) == $id)) | .[0]' | out
+      fi;;
+    issues/*/comments) { cat "$F/comments/$a.json" 2>/dev/null || echo '[]'; } | out;;
+    issues/*/) jq ".[] | select(.number == $a)" "$F/issues.json" | out;;
+    milestones\?*/|milestones\?*) jq '[.[] | select(.state == "open")]' "$F/milestones.json" | out;;
+    milestones//) echo 99;;
+    milestones/*/)
+      if [ "$method" = PATCH ]; then upd milestones.json "map(if .number == $a then .state = \"closed\" else . end)"
+      else jq --slurpfile is "$F/issues.json" ".[] | select(.number == $a) | .open_issues = ([\$is[0][] | select(.state == \"open\" and .milestone.number == $a)] | length)" "$F/milestones.json" | out; fi;;
+    pulls/*/reviews) { cat "$F/reviews/$a.json" 2>/dev/null || echo '[]'; } | out;;
+    *) echo "fake-gh: unhandled api path $path" >&2; exit 1;;
+  esac
+  exit 0
+fi
+
+case "${1:-}" in
+  issue)
+    case "$2" in
+      list)
+        ms="$(opt --milestone)"; lb="$(opt --label)"; st="$(opt --state)"; [ -n "$st" ] || st=open
+        jq --arg ms "$ms" --arg lb "$lb" --arg st "$st" '[.[] | select(($st == "all" or .state == $st)
+            and ($ms == "" or .milestone.title == $ms)
+            and ($lb == "" or ([.labels[].name] | index($lb))))]' "$F/issues.json" | out;;
+      edit)
+        n="$3"; add="$(opt --add-label)"; rm="$(opt --remove-label)"; ms="$(opt --milestone)"; asg="$(opt --add-assignee)"
+        [ -z "$rm" ] || upd issues.json "map(if .number == $n then .labels |= map(select(.name as \$l | (\"$rm\" | split(\",\") | index(\$l)) | not)) else . end)"
+        [ -z "$add" ] || upd issues.json "map(if .number == $n then .labels += [{\"name\": \"$add\"}] else . end)"
+        [ -z "$asg" ] || upd issues.json "map(if .number == $n then .assignees += [{\"login\": \"$asg\"}] else . end)"
+        if [ -n "$ms" ]; then jq --slurpfile m "$F/milestones.json" --arg ms "$ms" "map(if .number == $n then .milestone = {title: \$ms, number: ([\$m[0][] | select(.title == \$ms) | .number][0])} else . end)" "$F/issues.json" > "$F/i.tmp" && mv "$F/i.tmp" "$F/issues.json"; fi;;
+      comment)
+        n="$3"; f="$(opt --body-file)"; mkdir -p "$F/comments"; [ -f "$F/comments/$n.json" ] || echo '[]' > "$F/comments/$n.json"
+        id=$(( $(date +%s%N | cut -c10-15) + RANDOM ))
+        jq --arg b "$(cat "$f")" --arg t "$(now)" --arg me "$(me)" --argjson id "$id" \
+          '. += [{id: $id, created_at: $t, user: {login: $me}, author_association: "OWNER", body: $b}]' "$F/comments/$n.json" > "$F/c.tmp" && mv "$F/c.tmp" "$F/comments/$n.json";;
+      close) upd issues.json "map(if .number == $3 then .state = \"closed\" else . end)";;
+      create) echo "https://github.com/o/r/issues/100";;
+      *) echo "fake-gh: unhandled issue $2" >&2; exit 1;;
+    esac;;
+  pr)
+    case "$2" in
+      list)
+        st="$(opt --state)"; hd="$(opt --head)"
+        jq --arg st "$st" --arg hd "$hd" '[.[] | select(($st == "all" or ($st | ascii_upcase) == .state) and ($hd == "" or .headRefName == $hd))]' "$F/prs.json" | out;;
+      view) jq ".[] | select(.number == $3)" "$F/prs.json" | out;;
+      merge) upd prs.json "map(if .number == $3 then .state = \"MERGED\" else . end)";;
+      edit|ready|create|review) :;;
+      *) echo "fake-gh: unhandled pr $2" >&2; exit 1;;
+    esac;;
+  *) echo "fake-gh: unhandled $*" >&2; exit 1;;
+esac

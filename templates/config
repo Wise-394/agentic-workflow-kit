@@ -1,0 +1,58 @@
+# .agentkit/config: the kit's settings for this project. Committed to the repo.
+# Read with: git config -f .agentkit/config <section>.<key>
+# The agentkit-setup skill writes it; rerun setup to fill in keys a newer kit adds.
+
+[tracker]
+	kind = github
+	repo = <owner>/<repo>
+	agentLogin = <login the agents run as>
+	# A different reviewer account needs its token in AGENTKIT_REVIEWER_TOKEN when runs post reviews.
+	reviewerLogin = <login of a separate reviewer account, or the same as agentLogin>
+
+[git]
+	integrationBranch = <branch sprint PRs merge into, for example dev or main>
+	defaultBranch = <the repository's default branch>
+
+[commands]
+	# {file} and {files} are replaced with paths. Leave a value empty if the project has none.
+	check = <runs everything: types, lint, rules, all tests>
+	quick = <fast check on {files}, for example lint and typecheck; empty means check>
+	rules = <rules check, if separate from check>
+	test = <runs one test {file}>
+	format = <formats {files}; empty if there is no formatter>
+
+[forbidden]
+	# One line per command agents must never run, for example:
+	# command = npm run deploy
+
+[models]
+	# Model names as your harness spells them, or inherit.
+	thinking = inherit
+	working = inherit
+	escalation = thinking
+
+[merge]
+	# Issues outside any milestone go straight to the integration branch.
+	# user: the agent stops at "ready to merge". agent: it merges when every condition holds.
+	# Issue PRs into sprint branches are always merged by the agent; sprint PRs always by the user.
+	issues = user
+
+[slots]
+	# Which skill fills each slot. kit means the kit's own step. off means skip (optional slots only).
+	review = kit
+	qa = kit
+	securityReview = off
+
+[limits]
+	taskRounds = 3
+	reviewRounds = 3
+	sprintFixRounds = 2
+	issueSessions = 3
+	tasksPerSession = 4
+	issueChangedLines = 400
+	issueFiles = 8
+	issueAcceptanceTests = 5
+	taskFiles = 3
+	smallChangedLines = 50
+	smallFiles = 2
+	lockMinutes = 240
