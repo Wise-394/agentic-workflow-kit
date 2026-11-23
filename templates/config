@@ -9,6 +9,15 @@
 	# A different reviewer account needs its token in AGENTKIT_REVIEWER_TOKEN when runs post reviews.
 	reviewerLogin = <login of a separate reviewer account, or the same as agentLogin>
 
+# Workspace only (several code repos, one tracker): see reference/workspace.md.
+# [workspace]
+# 	root = ..
+# 	repo = web
+# [repo "web"]
+# 	slug = acme/web
+# 	integrationBranch = dev            (overrides [git])
+# 	check = npm run check              (overrides [commands]: check, quick, test, format, rules)
+
 [git]
 	integrationBranch = <branch sprint PRs merge into, for example dev or main>
 	defaultBranch = <the repository's default branch>

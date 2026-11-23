@@ -28,6 +28,17 @@ The kit itself holds no state and no version. A project that uses it has:
 | `.agentkit/config` exists and the user asks to set up or check again (for example after updating the kit) | **Reconcile** |
 | An M0 issue asks for the project docs | **Project docs**, unattended: record assumptions instead of asking |
 
+## Workspace (several repos, one tracker)
+
+Detect it: the folder the session started in is not a git repo, but holds several git repos with GitHub remotes. Then ask which repo is the **tracker** (issues live only there; its config is committed there) and confirm the list of code repos. Everything in Install applies per repo where it says "the repo", with these changes ([reference/workspace.md](../../reference/workspace.md) is the target shape):
+
+- `.agentkit/config` goes in the tracker repo, with `[workspace] root = ..` and one `repo = <folder>` line per code repo, and a `[repo "<folder>"]` section per repo holding `slug` and that repo's own commands and branches (detected per repo). Link `<workspace>/.agentkit/config` to it.
+- Detect remotes, integration branches, protection, and commands **per repo**; show one table per repo.
+- `AGENTS.md`, `CLAUDE.md`, and `docs/` must be readable at the workspace root. If the workspace root already links a docs folder, keep it and put the kit's docs there; otherwise create them in the tracker repo and link them from the root. `AGENTS.md` gets a "Repos" section: each folder, what it holds, its commands, and which repos consume which.
+- Adapter files (agents, settings) go in the workspace root's tool folder, since sessions start there.
+- `.gitignore` lines go in every code repo. `agentkit labels` runs once (tracker only).
+- Commit the written files in the repos that hold them, on a branch, through a PR the user approves.
+
 ## Install
 
 ### 1. Detect

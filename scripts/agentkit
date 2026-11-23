@@ -6,9 +6,24 @@ set -euo pipefail
 
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GH="${AGENTKIT_GH:-gh}"
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-CONF="$ROOT/.agentkit/config"
+# The config is the nearest .agentkit/config above the working directory (a link is
+# followed). Its repo is the home repo. With [workspace] root set, ROOT is the
+# workspace folder holding every code repo; otherwise it is the home repo itself.
+find_conf() {
+  local d; d="$(pwd -P)"
+  while :; do
+    [ -e "$d/.agentkit/config" ] && { printf '%s' "$d/.agentkit/config"; return; }
+    [ "$d" = / ] && return; d="$(dirname "$d")"
+  done
+}
+CONF="$(find_conf)"
+if [ -n "$CONF" ]; then CONF="$(readlink -f "$CONF")"; HOME_REPO="$(dirname "$(dirname "$CONF")")"
+else HOME_REPO="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; CONF="$HOME_REPO/.agentkit/config"; fi
+ROOT="$HOME_REPO"
+_wr="$(git config -f "$CONF" --get workspace.root 2>/dev/null || true)"
+[ -z "$_wr" ] || ROOT="$(cd "$HOME_REPO/$_wr" && pwd -P)"
 RUNTIME="$ROOT/.agentkit"
+REPO_NAME=""   # the code repo a command acts in (--repo); empty outside a workspace
 TMPD="$(mktemp -d "${TMPDIR:-/tmp}/agentkit.XXXXXX")"
 trap 'rm -rf "$TMPD"' EXIT
 
@@ -32,8 +47,41 @@ need_conf() { [ -f "$CONF" ] || die "no .agentkit/config; run the agentkit-setup
 repo()        { cfg tracker.repo; }
 agent_login() { cfg tracker.agentLogin; }
 reviewer()    { local r; r="$(cfg tracker.reviewerLogin)"; [ -n "$r" ] || r="$(agent_login)"; printf '%s' "$r"; }
-integ()       { cfg git.integrationBranch main; }
-default_br()  { cfg git.defaultBranch main; }
+rget() { # rget <key> <shared section.key> [default]: [repo "<current>"] <key>, else the shared key
+  local v=""; [ -z "$REPO_NAME" ] || v="$(cfg "repo.$REPO_NAME.$1")"
+  [ -n "$v" ] || v="$(cfg "$2" "${3:-}")"; printf '%s' "$v"
+}
+integ()       { rget integrationBranch git.integrationBranch main; }
+default_br()  { rget defaultBranch git.defaultBranch main; }
+ccmd()        { rget "$1" "commands.$1"; }
+
+# ---------- workspace: tickets in one tracker repo, code in several repos ----
+
+ws_repos() { cfg_all workspace.repo; }
+is_ws()    { [ -n "$(ws_repos)" ]; }
+crepo() { # the GitHub repo of the current code repo (PRs live there)
+  local s=""; [ -z "$REPO_NAME" ] || s="$(cfg "repo.$REPO_NAME.slug")"
+  [ -n "$s" ] || s="$(repo)"; printf '%s' "$s"
+}
+pr_ref() { if is_ws; then printf '%s#%s' "$(crepo)" "$1"; else printf '%s' "$1"; fi; }
+in_repo() { ( REPO_NAME="$1"; shift; cd "$ROOT/$REPO_NAME"; "$@" ); }
+for_repos() { # for_repos <function> [args]: run it in every code repo
+  local r
+  if is_ws; then for r in $(ws_repos); do in_repo "$r" "$@" || true; done
+  else in_repo "" "$@" || true; fi
+}
+enter_repo() { # enter_repo <command> required|optional: validate --repo and cd into the repo
+  if is_ws; then
+    if [ -z "$REPO_NAME" ]; then [ "$2" = optional ] && return 0
+      die "$1 needs --repo <name> in a workspace (repos: $(ws_repos | tr '\n' ' '))"; fi
+    ws_repos | grep -qxF -- "$REPO_NAME" || die "unknown repo $REPO_NAME (repos: $(ws_repos | tr '\n' ' '))"
+    [ -d "$ROOT/$REPO_NAME/.git" ] || die "repo $REPO_NAME is not cloned at $ROOT/$REPO_NAME"
+    cd "$ROOT/$REPO_NAME"
+  else
+    [ -z "$REPO_NAME" ] || die "--repo is only for workspaces ([workspace] in .agentkit/config)"
+    cd "$ROOT"
+  fi
+}
 limit()       { cfg "limits.$1" "$2"; }
 
 # ---------- gh with retry ---------------------------------------------------
@@ -93,19 +141,30 @@ sprint_branch_for() { # sprint/m<k> from a title "M<k>: ...", else sprint/ms<num
 }
 base_of() { local m; m="$(milestone_of "$1")"; if [ -n "$m" ]; then sprint_branch_for "$m"; else integ; fi; }
 
-merged_prs() { # number<TAB>title<TAB>head<TAB>base, cached per run
-  local f="$TMPD/merged"
-  [ -f "$f" ] || ghr pr list -R "$(repo)" --state merged --limit 400 \
+merged_prs() { # number<TAB>title<TAB>head<TAB>base of the current code repo, cached per run
+  local f="$TMPD/merged.$(crepo | tr '/' '_')"
+  [ -f "$f" ] || ghr pr list -R "$(crepo)" --state merged --limit 400 \
       --json number,title,headRefName,baseRefName \
       --jq '.[] | [.number, .title, .headRefName, .baseRefName] | @tsv' > "$f"
   cat "$f"
 }
-merged_pr_for() { # exact match on head branch "<type>/<N>-" or title "(#N)"
+merged_pr_here() { # exact match on head branch "<type>/<N>-" or title "(#N)" / "(owner/repo#N)"
   local n="$1"
-  merged_prs | awk -F'\t' -v n="$n" -v types="$TYPES" '
-    $3 ~ ("^(" types ")/" n "-") || index($2, "(#" n ")") { print $1 "\t" $4; exit }'
+  merged_prs | awk -F'\t' -v n="$n" -v types="$TYPES" -v tr="$(repo)" '
+    $3 ~ ("^(" types ")/" n "-") || index($2, "(#" n ")") || index($2, "(" tr "#" n ")") { print $1 "\t" $4; exit }'
 }
-open_pr_for_branch() { ghr pr list -R "$(repo)" --head "$1" --state open --json number --jq '.[0].number // empty'; }
+merged_pr_for() { # PR<TAB>base of N's merged PR; in a workspace only once none of N's PRs is still open
+  local n="$1"
+  if ! is_ws; then merged_pr_here "$n"; return; fi
+  [ -z "$(open_issue_prs "$n")" ] || return 0
+  for_repos merged_pr_here "$n" | sed -n 1p
+}
+open_issue_prs_here() {
+  ghr pr list -R "$(crepo)" --state open --limit 200 --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' \
+    | awk -F'\t' -v n="$1" -v types="$TYPES" -v r="$(crepo)" '$2 ~ ("^(" types ")/" n "-") { print r "#" $1 }'
+}
+open_issue_prs() { for_repos open_issue_prs_here "$1"; }
+open_pr_for_branch() { ghr pr list -R "$(crepo)" --head "$1" --state open --json number --jq '.[0].number // empty'; }
 
 remote_branch_of() { # existing remote issue branch for N
   git ls-remote --heads origin 2>/dev/null | awk '{sub("refs/heads/","",$2); print $2}' \
@@ -142,11 +201,17 @@ is_paused() {
   [ "${n:-0}" -gt 0 ]
 }
 
+origin_ok() {
+  local where="${REPO_NAME:+ in $REPO_NAME}"
+  [ -d .git ] || git rev-parse --git-dir >/dev/null 2>&1 || { echo "not a git repo$where"; return; }
+  git remote get-url origin >/dev/null 2>&1 || { echo "no git remote named origin$where"; return; }
+  git ls-remote --heads origin >/dev/null 2>&1 || echo "cannot reach origin$where"
+}
 cmd_preflight() { # preflight [--no-lock]
   need_conf
   "$GH" auth status >/dev/null 2>&1 || { say "error: gh is not logged in"; exit 1; }
-  git remote get-url origin >/dev/null 2>&1 || { say "error: no git remote named origin"; exit 1; }
-  git ls-remote --heads origin >/dev/null 2>&1 || { say "error: cannot reach origin"; exit 1; }
+  local bad; bad="$(for_repos origin_ok)"
+  [ -z "$bad" ] || { say "error: $bad"; exit 1; }
   [ -n "$(repo)" ] && [ -n "$(agent_login)" ] || { say "error: tracker.repo or tracker.agentLogin missing in config"; exit 1; }
   if is_paused; then say "paused"; exit 3; fi
   if [ "${1:-}" != "--no-lock" ]; then
@@ -170,10 +235,14 @@ active_milestone() { # number<TAB>title of the open milestone with the lowest M<
 milestone_issues() { # open issue numbers in a milestone
   ghr issue list -R "$(repo)" --milestone "$(milestone_title "$1")" --state open --limit 300 --json number --jq '.[].number'
 }
-sprint_pr() { # number<TAB>state<TAB>isDraft for a sprint branch (open or merged, newest)
-  ghr pr list -R "$(repo)" --head "$1" --state all --limit 5 --json number,state,isDraft \
+sprint_pr() { # number<TAB>state<TAB>isDraft for a sprint branch (open or merged, newest), current repo
+  ghr pr list -R "$(crepo)" --head "$1" --state all --limit 5 --json number,state,isDraft \
     --jq '.[0] | select(. != null) | [.number, .state, .isDraft] | @tsv'
 }
+sprint_pr_ref_here() { local l; l="$(sprint_pr "$1" || true)"; [ -z "$l" ] || printf '%s\t%s\n' "$(pr_ref "$(printf '%s' "$l" | cut -f1)")" "$(printf '%s' "$l" | cut -f2-)"; }
+sprint_prs() { for_repos sprint_pr_ref_here "$1"; } # ref<TAB>state<TAB>isDraft, one line per repo with a sprint PR
+sprint_open()   { printf '%s\n' "$1" | awk -F'\t' '$2 == "OPEN" { print $1 }'; }
+sprint_merged() { [ -n "$1" ] && [ -z "$(sprint_open "$1")" ] && printf '%s\n' "$1" | grep -q 'MERGED'; }
 
 blockers_cleared() { # blockers_cleared <N>: prints the first uncleared blocker, returns 1
   local n="$1" b base st m
@@ -252,7 +321,7 @@ cmd_pick() { # pick [milestone-number]: what the next session should do
   [ -n "$am" ] || { say "idle no open milestone"; return 0; }
   m="$(printf '%s' "$am" | cut -f1)"; mt="$(printf '%s' "$am" | cut -f2)"
   sb="$(sprint_branch_for "$m")"
-  spr="$(sprint_pr "$sb" || true)"
+  spr="$(sprint_prs "$sb")"
   for n in $(milestone_issues "$m" | sort -n); do
     if [ "$(type_of "$n")" = "verify" ]; then continue; fi
     case "$(status_of "$n")" in
@@ -268,10 +337,11 @@ cmd_pick() { # pick [milestone-number]: what the next session should do
   done
   if [ -n "$resume" ]; then say "resume $resume"; return 0; fi
   if [ -n "$start" ]; then say "start $start"; return 0; fi
-  if [ -n "$spr" ] && [ "$(printf '%s' "$spr" | cut -f2)" = "OPEN" ] && [ "$(printf '%s' "$spr" | cut -f3)" = "false" ]; then
-    say "awaiting-merge $(printf '%s' "$spr" | cut -f1)"; return 0
-  fi
-  if [ "$done_count" -gt 0 ] && [ -n "$spr" ] && [ "$(printf '%s' "$spr" | cut -f2)" = "OPEN" ]; then say "wrap $m"; return 0; fi
+  local open drafts
+  open="$(sprint_open "$spr")"
+  drafts="$(printf '%s\n' "$spr" | awk -F'\t' '$2 == "OPEN" && $3 == "true"')"
+  if [ -n "$open" ] && [ -z "$drafts" ]; then say "awaiting-merge $(echo $open)"; return 0; fi
+  if [ "$done_count" -gt 0 ] && [ -n "$open" ]; then say "wrap $m"; return 0; fi
   if [ -n "$stuck" ]; then say "idle every remaining issue is blocked:$stuck"; return 0; fi
   say "idle nothing ready in $mt"
 }
@@ -283,7 +353,8 @@ cmd_status() { # status: one JSON object for the orchestrator (no model tokens)
   am="$(active_milestone)"
   if [ -n "$am" ]; then
     m="$(printf '%s' "$am" | cut -f1)"; mt="$(printf '%s' "$am" | cut -f2)"
-    sb="$(sprint_branch_for "$m")"; spr="$(sprint_pr "$sb" | cut -f1 || true)"
+    sb="$(sprint_branch_for "$m")"; spr="$(sprint_prs "$sb" | cut -f1 | sed -n 1p)"
+    if [ -n "$spr" ] && is_ws; then spr="\"$spr\""; fi
     for n in $(milestone_issues "$m" | sort -n); do
       s="$(status_of "$n")"
       case "$s" in
@@ -403,7 +474,13 @@ changed() { # changed tracked|untracked: paths, one per line, runtime files excl
 dirty() { changed tracked; changed untracked; }
 on_issue_branch() { git rev-parse --abbrev-ref HEAD | grep -qE "^($TYPES)/${1:-[0-9]+}-"; }
 
-cmd_rescue() { # keep unfinished work from a crashed session as a WIP commit, never discard it
+cmd_rescue() { # keep unfinished work from a crashed session as a WIP commit, never discard it (every repo without --repo)
+  if is_ws && [ -z "$REPO_NAME" ]; then
+    local r rc=0; for r in $(ws_repos); do in_repo "$r" rescue_here | sed "s/^/$r: /" || rc=1; done; return $rc
+  fi
+  rescue_here
+}
+rescue_here() {
   local cur f n untracked
   cur="$(git rev-parse --abbrev-ref HEAD)"
   untracked="$(changed untracked)"
@@ -450,7 +527,7 @@ cmd_ensure_sprint() { # ensure-sprint <milestone-number>: sprint branch and draf
   if [ -z "$pr" ] && [ -z "$(sprint_pr "$sb" | grep MERGED || true)" ]; then
     local tpl; tpl="$(cat "$KIT/templates/sprint-pr-body.md")"
     printf '%s\n' "${tpl//<milestone>/$title}" > "$body"
-    ghr pr create -R "$(repo)" --draft --base "$ib" --head "$sb" --title "Sprint $title" --body-file "$body" >/dev/null
+    ghr pr create -R "$(crepo)" --draft --base "$ib" --head "$sb" --title "Sprint $title" --body-file "$body" >/dev/null
     pr="$(open_pr_for_branch "$sb")"
   fi
   say "$sb ${pr:-merged}"
@@ -509,11 +586,11 @@ cmd_check_task() { # check-task <N> <k>/<n> <message> --tests <files...> --files
   done
   local all=("${tests[@]+"${tests[@]}"}" "${files[@]+"${files[@]}"}")
   [ "${#all[@]}" -gt 0 ] || die "check-task needs --tests and/or --files"
-  c="$(cfg commands.format)"
+  c="$(ccmd format)"
   if [ -n "$c" ]; then case "$c" in *'{files}'*) run_cmd format "$(subst "$c" files "${all[@]}")" || ok=1;; *) say "format: skipped (runs in full check)";; esac; fi
-  c="$(cfg commands.test)"
+  c="$(ccmd test)"
   for f in "${tests[@]+"${tests[@]}"}"; do run_cmd "test $f" "$(subst "$c" file "$f")" || ok=1; done
-  c="$(cfg commands.quick)"; [ -n "$c" ] || c="$(cfg commands.check)"
+  c="$(ccmd quick)"; [ -n "$c" ] || c="$(ccmd check)"
   case "$c" in *'{files}'*) run_cmd quick "$(subst "$c" files "${all[@]}")" || ok=1;; *) run_cmd quick "$c" || ok=1;; esac
   say "Head: $(git rev-parse HEAD)"
   if [ "$ok" -ne 0 ]; then say "Result: FAILED"; return 1; fi
@@ -531,9 +608,9 @@ cmd_check_full() { # check-full <N> | check-full --base <branch>: full check, ru
   need_conf; local n="$1" base ok=0 c mb
   if [ "$n" = "--base" ]; then base="$2"; else base="$(base_of "$n")"; fi
   git fetch -q origin "$base"
-  c="$(cfg commands.format)"; case "$c" in ''|*'{files}'*) ;; *) run_cmd format "$c" || ok=1;; esac
-  run_cmd check "$(cfg commands.check)" || ok=1
-  c="$(cfg commands.rules)"; [ -z "$c" ] || run_cmd rules "$c" || ok=1
+  c="$(ccmd format)"; case "$c" in ''|*'{files}'*) ;; *) run_cmd format "$c" || ok=1;; esac
+  run_cmd check "$(ccmd check)" || ok=1
+  c="$(ccmd rules)"; [ -z "$c" ] || run_cmd rules "$c" || ok=1
   mb="$(git merge-base "origin/$base" HEAD)"
   say "Size: $(git diff --shortstat "$mb" HEAD -- . ':(exclude)*.lock' ':(exclude)*-lock.json' ':(exclude)**/migrations/**' ':(exclude)**/__snapshots__/**' | sed 's/^ //') (limit $(limit issueChangedLines 400) lines, $(limit issueFiles 8) files)"
   say "Head: $(git rev-parse HEAD)"
@@ -559,18 +636,19 @@ cmd_open_pr() { # open-pr <N> <body-file> [title]
   br="$(git rev-parse --abbrev-ref HEAD)"; base="$(base_of "$n")"
   [ -z "$(dirty)" ] || die "uncommitted changes; every task must be committed first"
   git push -q origin "$br"
-  [ -n "$t" ] || t="$(branch_prefix "$(type_of "$n")")(#$n): $(iget "$n" '.title')"
+  local ref="#$n"; [ "$(crepo)" = "$(repo)" ] || ref="$(repo)#$n"
+  [ -n "$t" ] || t="$(branch_prefix "$(type_of "$n")")($ref): $(iget "$n" '.title')"
   pr="$(open_pr_for_branch "$br")"
   if [ -n "$pr" ]; then
-    cb="$(ghr pr view "$pr" -R "$(repo)" --json baseRefName --jq '.baseRefName')"
-    if [ "$cb" != "$base" ]; then ghr pr edit "$pr" -R "$(repo)" --base "$base" >/dev/null; echo "retargeted #$pr from $cb to $base" >&2; fi
-    ghr pr edit "$pr" -R "$(repo)" --body-file "$f" >/dev/null
-  else ghr pr create -R "$(repo)" --base "$base" --head "$br" --title "$t" --body-file "$f" >/dev/null; pr="$(open_pr_for_branch "$br")"; fi
+    cb="$(ghr pr view "$pr" -R "$(crepo)" --json baseRefName --jq '.baseRefName')"
+    if [ "$cb" != "$base" ]; then ghr pr edit "$pr" -R "$(crepo)" --base "$base" >/dev/null; echo "retargeted #$pr from $cb to $base" >&2; fi
+    ghr pr edit "$pr" -R "$(crepo)" --body-file "$f" >/dev/null
+  else ghr pr create -R "$(crepo)" --base "$base" --head "$br" --title "$t" --body-file "$f" >/dev/null; pr="$(open_pr_for_branch "$br")"; fi
   set_status "$n" in-review
   say "$pr"
 }
 
-head_sha() { ghr pr view "$1" -R "$(repo)" --json headRefOid --jq '.headRefOid'; }
+head_sha() { ghr pr view "$1" -R "$(crepo)" --json headRefOid --jq '.headRefOid'; }
 
 cmd_review_post() { # review-post <PR> approve|changes <file>
   need_conf; local pr="$1" v="$2" f="$3" sha body="$TMPD/rv"
@@ -579,10 +657,10 @@ cmd_review_post() { # review-post <PR> approve|changes <file>
   local flag; [ "$v" = approve ] && flag=--approve || flag=--request-changes
   if [ "$(reviewer)" != "$(agent_login)" ]; then
     [ -n "${AGENTKIT_REVIEWER_TOKEN:-}" ] || die "tracker.reviewerLogin is $(reviewer), but AGENTKIT_REVIEWER_TOKEN isn't set; reviews must be posted as that account"
-    GH_TOKEN="$AGENTKIT_REVIEWER_TOKEN" ghr pr review "$pr" -R "$(repo)" "$flag" --body-file "$body" >/dev/null
+    GH_TOKEN="$AGENTKIT_REVIEWER_TOKEN" ghr pr review "$pr" -R "$(crepo)" "$flag" --body-file "$body" >/dev/null
   else
-    ghr pr review "$pr" -R "$(repo)" "$flag" --body-file "$body" >/dev/null 2>&1 \
-      || ghr pr review "$pr" -R "$(repo)" --comment --body-file "$body" >/dev/null
+    ghr pr review "$pr" -R "$(crepo)" "$flag" --body-file "$body" >/dev/null 2>&1 \
+      || ghr pr review "$pr" -R "$(crepo)" --comment --body-file "$body" >/dev/null
   fi
   say "review posted: $v on $sha"
 }
@@ -590,37 +668,37 @@ cmd_review_post() { # review-post <PR> approve|changes <file>
 latest_review() { # verdict<TAB>sha of the latest kit review from the trusted reviewer
   local r="$(reviewer)" a="$(agent_login)" who
   if [ "$r" != "$a" ]; then who="(.user.login == \"$r\")"; else who="(.user.login == \"$a\")"; fi
-  api "repos/$(repo)/pulls/$1/reviews" --paginate \
+  api "repos/$(crepo)/pulls/$1/reviews" --paginate \
     --jq ".[] | select($who and (.body | startswith(\"<!-- agentkit:review\"))) | .body | split(\"\n\")[0]" \
     | tail -1 | sed -n 's/.*verdict=\([a-z]*\) sha=\([0-9a-f]*\).*/\1\t\2/p'
 }
 checks_ok() { # CI green on the head, or no CI and the body's Checks line shows a pass on the head
   local pr="$1" sha="$2" n bad
-  n="$(ghr pr view "$pr" -R "$(repo)" --json statusCheckRollup --jq '.statusCheckRollup | length')"
+  n="$(ghr pr view "$pr" -R "$(crepo)" --json statusCheckRollup --jq '.statusCheckRollup | length')"
   if [ "${n:-0}" -gt 0 ]; then
-    bad="$(ghr pr view "$pr" -R "$(repo)" --json statusCheckRollup \
+    bad="$(ghr pr view "$pr" -R "$(crepo)" --json statusCheckRollup \
       --jq '[.statusCheckRollup[] | (.conclusion // .state // "") | ascii_upcase | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED" and . != "" and . != "PENDING" and . != "EXPECTED")] | length')"
     [ "${bad:-1}" -eq 0 ] || return 1
-    bad="$(ghr pr view "$pr" -R "$(repo)" --json statusCheckRollup \
+    bad="$(ghr pr view "$pr" -R "$(crepo)" --json statusCheckRollup \
       --jq '[.statusCheckRollup[] | (.conclusion // .state // "") | ascii_upcase | select(. == "" or . == "PENDING" or . == "EXPECTED")] | length')"
     [ "${bad:-1}" -eq 0 ] || return 2
     return 0
   fi
-  ghr pr view "$pr" -R "$(repo)" --json body --jq '.body' | grep -E '^\*\*Checks:\*\*' | grep -q "$sha" \
-    && ghr pr view "$pr" -R "$(repo)" --json body --jq '.body' | grep -E '^\*\*Checks:\*\*' | grep -q 'ALL PASS'
+  ghr pr view "$pr" -R "$(crepo)" --json body --jq '.body' | grep -E '^\*\*Checks:\*\*' | grep -q "$sha" \
+    && ghr pr view "$pr" -R "$(crepo)" --json body --jq '.body' | grep -E '^\*\*Checks:\*\*' | grep -q 'ALL PASS'
 }
 pr_issue() { # the issue a PR builds: from its head branch, else its title
   local h t
-  h="$(ghr pr view "$1" -R "$(repo)" --json headRefName --jq '.headRefName')"
+  h="$(ghr pr view "$1" -R "$(crepo)" --json headRefName --jq '.headRefName')"
   printf '%s' "$h" | sed -nE "s#^($TYPES)/([0-9]+)-.*#\2#p" | grep . && return
-  t="$(ghr pr view "$1" -R "$(repo)" --json title --jq '.title')"
-  printf '%s' "$t" | sed -nE 's/.*\(#([0-9]+)\).*/\1/p'
+  t="$(ghr pr view "$1" -R "$(crepo)" --json title --jq '.title')"
+  printf '%s' "$t" | sed -nE 's/.*\(([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?#([0-9]+)\).*/\2/p'
 }
 
 cmd_can_merge() { # can-merge <PR>: prints each condition; exit 0 only if all hold
   need_conf; local pr="$1" sha head base v rsha n ok=0 st
-  head="$(ghr pr view "$pr" -R "$(repo)" --json headRefName --jq '.headRefName')"
-  base="$(ghr pr view "$pr" -R "$(repo)" --json baseRefName --jq '.baseRefName')"
+  head="$(ghr pr view "$pr" -R "$(crepo)" --json headRefName --jq '.headRefName')"
+  base="$(ghr pr view "$pr" -R "$(crepo)" --json baseRefName --jq '.baseRefName')"
   sha="$(head_sha "$pr")"
   case "$head" in sprint/*) say "refused: sprint PRs are merged by the user"; return 1;; esac
   case "$base" in
@@ -634,7 +712,7 @@ EOF
   if [ "${v:-}" = approve ] && [ "${rsha:-}" = "$sha" ]; then say "review: approved on $sha"; else say "review: FAIL (latest ${v:-none} on ${rsha:-none}, head $sha)"; ok=1; fi
   local cr=0; checks_ok "$pr" "$sha" || cr=$?
   case "$cr" in 0) say "checks: pass on $sha";; 2) say "checks: PENDING (CI still running; end the session with continue)"; ok=1;; *) say "checks: FAIL"; ok=1;; esac
-  if ghr pr view "$pr" -R "$(repo)" --json body --jq '.body' | awk '/^## Evidence/{e=1;next} /^## /{e=0} e' | grep -qE '<[a-z][^>]* [^>]*>'; then
+  if ghr pr view "$pr" -R "$(crepo)" --json body --jq '.body' | awk '/^## Evidence/{e=1;next} /^## /{e=0} e' | grep -qE '<[a-z][^>]* [^>]*>'; then
     say "evidence: FAIL (placeholders left)"; ok=1; else say "evidence: present"; fi
   n="$(pr_issue "$pr" || true)"
   if [ -n "$n" ]; then st="$(status_of "$n")"
@@ -645,37 +723,50 @@ EOF
 cmd_merge() { # merge <PR>: only when can-merge holds; then the issue's housekeeping
   need_conf; local pr="$1" sha base n
   cmd_can_merge "$pr" || { say "not merged"; return 1; }
-  sha="$(head_sha "$pr")"; base="$(ghr pr view "$pr" -R "$(repo)" --json baseRefName --jq '.baseRefName')"
-  ghr pr merge "$pr" -R "$(repo)" --squash --delete-branch=false --match-head-commit "$sha" >/dev/null
+  sha="$(head_sha "$pr")"; base="$(ghr pr view "$pr" -R "$(crepo)" --json baseRefName --jq '.baseRefName')"
+  ghr pr merge "$pr" -R "$(crepo)" --squash --delete-branch=false --match-head-commit "$sha" >/dev/null
   n="$(pr_issue "$pr" || true)"
   if [ -n "$n" ]; then after_merge "$n" "$base" "$pr"; fi
   say "merged #$pr into $base"
 }
 after_merge() { # after_merge <N> <base> <PR>
-  local n="$1" base="$2" pr="$3"
+  local n="$1" base="$2" pr="$3" left
+  if is_ws; then
+    left="$(open_issue_prs "$n")"
+    if [ -n "$left" ]; then say "#$n: waiting on $(echo $left)"; return 0; fi
+  fi
   case "$base" in
     sprint/*) set_status "$n" merged;;
     *) set_status "$n" none
        if [ "$base" != "$(default_br)" ] && [ "$(iget "$n" '.state')" = open ]; then
-         ghr issue close "$n" -R "$(repo)" --comment "Merged into $base in #$pr." >/dev/null; fi;;
+         ghr issue close "$n" -R "$(repo)" --comment "Merged into $base in $(pr_ref "$pr")." >/dev/null; fi;;
   esac
 }
 
-cmd_wrap() { # wrap get <milestone> | wrap set <milestone> <phase> [round]
-  need_conf; local op="$1" m="$2" sb pr body="$TMPD/wb"
-  sb="$(sprint_branch_for "$m")"; pr="$(open_pr_for_branch "$sb")"
-  [ -n "$pr" ] || die "no open sprint PR for $sb"
-  ghr pr view "$pr" -R "$(repo)" --json body --jq '.body' > "$body"
+wrap_here() { # wrap_here get|set <sprint-branch> [phase] [round]: on this repo's open sprint PR
+  local op="$1" sb="$2" pr body="$TMPD/wb.$(crepo | tr '/' '_')"
+  pr="$(open_pr_for_branch "$sb")"; [ -n "$pr" ] || return 0
+  ghr pr view "$pr" -R "$(crepo)" --json body --jq '.body' > "$body"
   case "$op" in
-    get) sed -n 's/.*agentkit:wrap phase=\([a-z-]*\) round=\([0-9]*\).*/\1 \2/p' "$body" | head -1 | grep . || echo "build 0";;
+    get) sed -n 's/.*agentkit:wrap phase=\([a-z-]*\) round=\([0-9]*\).*/\1 \2/p' "$body" | head -1; echo "has-pr";;
     set) if grep -q 'agentkit:wrap' "$body"; then
            sed -i.bak "s/<!-- agentkit:wrap[^>]*-->/<!-- agentkit:wrap phase=$3 round=${4:-0} -->/" "$body"
          else printf '\n<!-- agentkit:wrap phase=%s round=%s -->\n' "$3" "${4:-0}" >> "$body"; fi
-         ghr pr edit "$pr" -R "$(repo)" --body-file "$body" >/dev/null
-         [ "$3" != ready ] || ghr pr ready "$pr" -R "$(repo)" >/dev/null
-         say "wrap $3 ${4:-0} on #$pr";;
-    *) die "wrap get|set";;
+         ghr pr edit "$pr" -R "$(crepo)" --body-file "$body" >/dev/null
+         [ "$3" != ready ] || ghr pr ready "$pr" -R "$(crepo)" >/dev/null
+         say "wrap $3 ${4:-0} on $(pr_ref "$pr")";;
   esac
+}
+cmd_wrap() { # wrap get <milestone> | wrap set <milestone> <phase> [round]: the phase lives on every open sprint PR
+  need_conf; local op="$1" m="$2" sb out
+  case "$op" in get|set) ;; *) die "wrap get|set";; esac
+  sb="$(sprint_branch_for "$m")"
+  out="$(for_repos wrap_here "$op" "$sb" "${3:-}" "${4:-}")"
+  printf '%s\n' "$out" | grep -q . || die "no open sprint PR for $sb"
+  if [ "$op" = get ]; then
+    printf '%s\n' "$out" | grep -q has-pr || die "no open sprint PR for $sb"
+    printf '%s\n' "$out" | grep -v '^has-pr$' | grep . | head -1 || echo "build 0"
+  else printf '%s\n' "$out"; fi
 }
 
 cmd_new_issue() { # new-issue <milestone-number|none> <type> <title> <body-file>: prints the number
@@ -700,9 +791,9 @@ cmd_issue_body() { # issue-body <N> <file>: replace an issue body the agent owns
 }
 cmd_pr_body() { # pr-body <PR> <file>: replace a PR body, keeping its wrap-up marker
   need_conf; local mk f="$TMPD/prb"
-  mk="$(ghr pr view "$1" -R "$(repo)" --json body --jq '.body' | grep -o '<!-- agentkit:wrap[^>]*-->' | head -1 || true)"
+  mk="$(ghr pr view "$1" -R "$(crepo)" --json body --jq '.body' | grep -o '<!-- agentkit:wrap[^>]*-->' | head -1 || true)"
   cp "$2" "$f"; if [ -n "$mk" ] && ! grep -q 'agentkit:wrap' "$f"; then printf '\n%s\n' "$mk" >> "$f"; fi
-  ghr pr edit "$1" -R "$(repo)" --body-file "$f" >/dev/null; say "#$1 body updated"
+  ghr pr edit "$1" -R "$(crepo)" --body-file "$f" >/dev/null; say "#$1 body updated"
 }
 cmd_split() { # split <N> <part> <part>...: record the parts, mark the original as split
   need_conf; local n="$1" f="$TMPD/split" p list=""; shift
@@ -726,15 +817,27 @@ cmd_sync_sprint() { # sync-sprint <milestone-number>: merge the integration bran
 
 # ---------- housekeeping ----------------------------------------------------
 
+merged_sprints_here() { # ref<TAB>head<TAB>base<TAB>yes|no (closes issues)<TAB>issue numbers, for merged sprint PRs
+  local pr head base body tr close
+  tr="$(repo)"
+  merged_prs | awk -F'\t' '$3 ~ /^sprint\//' | head -10 | while IFS=$'\t' read -r pr _ head base; do
+    body="$(ghr pr view "$pr" -R "$(crepo)" --json body --jq '.body')"
+    close=no; [ "$base" = "$(default_br)" ] || close=yes
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(pr_ref "$pr")" "$head" "$base" "$close" "$( {
+      printf '%s' "$body" | grep -oiE "(closes|fixes|resolves) ${tr//./\\.}#[0-9]+" || true
+      [ "$(crepo)" != "$tr" ] || printf '%s' "$body" | grep -oiE '(closes|fixes|resolves) #[0-9]+' || true
+    } | grep -oE '[0-9]+$' | sort -un | tr '\n' ' ')"
+  done
+}
 cmd_housekeeping() { # repair state so done work is never picked again; changes nothing else
   need_conf; local pr base head body n st m nm am latest ans x k
   # 1. merged sprint PRs: close their issues (when GitHub didn't), carry stuck issues over, close the milestone
-  merged_prs | awk -F'\t' '$3 ~ /^sprint\//' | head -10 | while IFS=$'\t' read -r pr _ head base; do
-    body="$(ghr pr view "$pr" -R "$(repo)" --json body --jq '.body')"
-    for n in $(printf '%s' "$body" | grep -oiE '(closes|fixes|resolves) #[0-9]+' | grep -oE '[0-9]+' || true); do
+  for_repos merged_sprints_here | while IFS=$'\t' read -r ref head base close issues; do
+    if is_ws && [ -n "$(sprint_open "$(sprint_prs "$head")")" ]; then say "$head: waiting for the open sprint PRs in other repos"; continue; fi
+    for n in $issues; do
       [ "$(iget "$n" '.state')" = open ] || { has_label "$n" status:merged && set_status "$n" none && say "#$n: cleared status:merged"; continue; }
       set_status "$n" none
-      if [ "$base" != "$(default_br)" ]; then ghr issue close "$n" -R "$(repo)" --comment "Merged into $base in sprint PR #$pr." >/dev/null; say "#$n: closed (sprint PR #$pr merged)"; fi
+      if [ "$close" = yes ]; then ghr issue close "$n" -R "$(repo)" --comment "Merged into $base in sprint PR $ref." >/dev/null; say "#$n: closed (sprint PR $ref merged)"; fi
     done
     m=""; for x in $(api "repos/$(repo)/milestones?state=open&per_page=100" --jq '.[].number'); do
       [ "$(sprint_branch_for "$x")" = "$head" ] && { m="$x"; break; }; done
@@ -785,7 +888,7 @@ cmd_housekeeping() { # repair state so done work is never picked again; changes 
   # 3. empty open milestones whose sprint PR merged
   api "repos/$(repo)/milestones?state=open&per_page=100" --jq '.[] | select(.open_issues == 0) | .number' | while read -r m; do
     [ -n "$m" ] || continue
-    if sprint_pr "$(sprint_branch_for "$m")" | grep -q MERGED; then api -X PATCH "repos/$(repo)/milestones/$m" -f state=closed >/dev/null; say "milestone $m: closed"; fi
+    if sprint_merged "$(sprint_prs "$(sprint_branch_for "$m")")"; then api -X PATCH "repos/$(repo)/milestones/$m" -f state=closed >/dev/null; say "milestone $m: closed"; fi
   done
   say "housekeeping: done"
 }
@@ -812,6 +915,18 @@ cmd_result() { # result <outcome> [N] [--keep-lock]: checks the outcome against 
   say "AGENTKIT_RESULT $line"
 }
 
+cmd_repos() { # repos [N | --sprint <milestone>]: code repos (name, GitHub repo); with N, those with N's branch
+  need_conf
+  case "${1:-}" in
+    "") for_repos repo_line;;
+    --sprint) local sb; sb="$(sprint_branch_for "$2")"; for_repos has_branch "$sb";;
+    *) for_repos has_issue_branch "$1";;
+  esac
+}
+repo_line() { printf '%s\t%s\n' "${REPO_NAME:-.}" "$(crepo)"; }
+has_branch() { [ -z "$(git ls-remote --heads origin "$1" 2>/dev/null)" ] || echo "${REPO_NAME:-.}"; }
+has_issue_branch() { [ -z "$(remote_branch_of "$1")" ] || echo "${REPO_NAME:-.}"; }
+
 cmd_help() {
   sed -n 's/^cmd_\([a-z_]*\)() { # \(.*\)/\1: \2/p' "${BASH_SOURCE[0]}" | tr '_' '-'
   cat <<'EOF'
@@ -820,8 +935,18 @@ EOF
 }
 
 c="${1:-help}"; [ $# -eq 0 ] || shift
+_a=()
+while [ $# -gt 0 ]; do
+  case "$1" in --repo) REPO_NAME="${2:-}"; shift; [ $# -eq 0 ] || shift;; --repo=*) REPO_NAME="${1#--repo=}"; shift;; *) _a+=("$1"); shift;; esac
+done
+set -- "${_a[@]+"${_a[@]}"}"
 case "$c" in
-  labels|preflight|pick|status|ready|base|claim|plan|block|unblock|findings|session|housekeeping|rescue|branch|progress|sync|merge|wrap|result|split|milestone|help)
+  branch|progress|sync|merge|check-task|check-full|open-pr|review-post|can-merge|ensure-sprint|sync-sprint|pr-body) enter_repo "$c" required;;
+  rescue|base) enter_repo "$c" optional;;
+  *) [ -z "$REPO_NAME" ] || enter_repo "$c" optional;;
+esac
+case "$c" in
+  labels|preflight|pick|status|ready|base|claim|plan|block|unblock|findings|session|housekeeping|rescue|branch|progress|sync|merge|wrap|result|split|milestone|repos|help)
     "cmd_$c" "$@";;
   set-status|ensure-sprint|check-task|check-full|open-pr|review-post|can-merge|new-issue|new-milestone|issue-body|pr-body|sync-sprint)
     "cmd_${c//-/_}" "$@";;

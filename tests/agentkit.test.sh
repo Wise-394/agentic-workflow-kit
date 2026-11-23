@@ -286,6 +286,114 @@ issue 3 type:feature,status:blocked 1
 pr 40 MERGED sprint/m1 dev "Sprint M1"
 expect "carry-over: creates the next milestone when none exists" "created milestone M2: Carry-over" "$(ak housekeeping)"
 
+# ---------- workspace: one tracker repo, code in several repos ----------------
+# Layout: $T/ws/{be,fe} are git repos; tickets live in be's tracker (o/be).
+# The config is committed in be and linked from $T/ws/.agentkit/config.
+
+wsfresh() {
+  rm -rf "$T/ws" "$T/be.git" "$T/fe.git" "$T/fake"; mkdir -p "$T/fake/comments" "$T/fake/reviews" "$T/fake/graphql"
+  export FAKE="$T/fake" AGENTKIT_GH="$KIT/tests/fake-gh" WS="$T/ws"
+  local r
+  for r in be fe; do
+    git init -q --bare -b main "$T/$r.git"
+    git init -q -b main "$WS/$r"
+    git -C "$WS/$r" config user.email t@t; git -C "$WS/$r" config user.name t; git -C "$WS/$r" config commit.gpgsign false
+    git -C "$WS/$r" remote add origin "$T/$r.git"
+    mkdir -p "$WS/$r/src" "$WS/$r/test"; echo x > "$WS/$r/src/a.js"
+    printf '.agentkit/*\n!.agentkit/config\n' > "$WS/$r/.gitignore"
+  done
+  mkdir -p "$WS/be/.agentkit"
+  cat > "$WS/be/.agentkit/config" <<'EOF2'
+[tracker]
+	repo = o/be
+	agentLogin = agent
+[workspace]
+	root = ..
+	repo = be
+	repo = fe
+[git]
+	integrationBranch = main
+	defaultBranch = main
+[commands]
+	check = true
+	test = test -f {file}
+	quick = true
+[repo "be"]
+	slug = o/be
+[repo "fe"]
+	slug = o/fe
+	integrationBranch = dev
+	quick = test -f src/a.js
+EOF2
+  for r in be fe; do git -C "$WS/$r" add -A; git -C "$WS/$r" commit -q -m init; git -C "$WS/$r" push -q -u origin main; done
+  mkdir -p "$WS/.agentkit"; ln -s ../be/.agentkit/config "$WS/.agentkit/config"
+  echo '[]' > "$FAKE/issues.json"; echo '[]' > "$FAKE/prs.json"
+  echo '[{"number":1,"title":"M1: First","state":"open"},{"number":2,"title":"M2: Second","state":"open"}]' > "$FAKE/milestones.json"
+  : > "$FAKE/log"
+}
+wak() { (cd "$WS" && bash "$KIT/scripts/agentkit" "$@" 2>&1); }
+rpr() { # rpr <repo-slug> <N> <state> <head> <base> [title] [draft]
+  pr "$2" "$3" "$4" "$5" "${6:-PR $2}" "${7:-false}"
+  jq --argjson n "$2" --arg r "$1" 'map(if .number == $n and .repo == null then .repo = $r else . end)' "$FAKE/prs.json" > "$FAKE/p" && mv "$FAKE/p" "$FAKE/prs.json"
+}
+
+wsfresh
+issue 2 type:feature 1
+expect "ws: repos lists every code repo with its slug" "fe	o/fe" "$(wak repos)"
+expect "ws: repo commands need --repo" "needs --repo" "$(wak branch 2)"
+expect "ws: unknown repo is refused" "unknown repo" "$(wak branch 2 --repo nope)"
+br="$(wak branch 2 --repo fe | tail -1)"
+expect "ws: branch created in the named repo" "feat/2-issue-2" "$br"
+expect "ws: branch checked out in fe" "feat/2-issue-2" "$(git -C "$WS/fe" rev-parse --abbrev-ref HEAD)"
+expect "ws: fe sprint branch on fe's origin" "sprint/m1" "$(git -C "$WS/fe" ls-remote --heads origin)"
+expect "ws: fe integration branch from its own config" "dev" "$(git -C "$WS/fe" ls-remote --heads origin)"
+expect_not "ws: be untouched" "sprint/m1" "$(git -C "$WS/be" ls-remote --heads origin)"
+expect "ws: repos <N> lists repos with a branch for the issue" "fe" "$(wak repos 2)"
+expect_not "ws: repos <N> leaves out untouched repos" "be" "$(wak repos 2)"
+echo t > "$WS/fe/test/a.test.js"
+out="$(wak check-task 2 1/1 "feat(o/be#2): a" --repo fe --tests test/a.test.js --files src/a.js)"
+expect "ws: check-task runs in the repo with its commands" "Result: ALL PASS" "$out"
+expect "ws: check-task commits in fe" "Task: 1/1" "$(git -C "$WS/fe" log -1 --format=%B)"
+git -C "$WS/be" config -f .agentkit/config repo.fe.quick false
+expect "ws: per-repo command overrides the shared one" "Result: FAILED" "$(wak check-task 2 1/1 m --repo fe --files src/a.js)"
+issue 60 type:bug -
+expect "ws: base is per repo" "dev" "$(wak base 60 --repo fe)"
+wak result idle >/dev/null
+expect "ws: runtime files live in the workspace" "idle" "$(cat "$WS/.agentkit/last-result.json")"
+expect "ws: preflight checks every repo" "ok" "$(wak preflight --no-lock)"
+
+wsfresh
+issue 2 type:feature,status:in-review 1
+rpr o/fe 41 OPEN feat/2-issue-2 sprint/m1 "feat(o/be#2): Issue 2"
+rpr o/be 41 OPEN feat/2-issue-2 sprint/m1 "feat(#2): Issue 2"
+echo '[{"user":{"login":"agent"},"body":"<!-- agentkit:review verdict=approve sha=abc -->\nok"}]' > "$FAKE/reviews/41.json"
+jq 'map(.body = "**Checks:** ALL PASS on abc\n## Evidence\n| 1 | x | PASS | out |")' "$FAKE/prs.json" > "$FAKE/p" && mv "$FAKE/p" "$FAKE/prs.json"
+out="$(wak merge 41 --repo fe)"
+expect "ws: merge acts on the repo's PR" "merged #41 into sprint/m1" "$out"
+expect "ws: merge waits for the issue's other PRs" "waiting on" "$out"
+expect_not "ws: issue not merged while be's PR is open" "status:merged" "$(labels 2)"
+expect_not "ws: ready doesn't treat a partial merge as done" "merged PR already exists" "$(wak ready 2)"
+wak merge 41 --repo be >/dev/null
+expect "ws: last PR merged marks the issue merged" "status:merged" "$(labels 2)"
+
+wsfresh
+issue 2 type:feature,status:merged 1
+rpr o/fe 50 OPEN sprint/m1 dev "Sprint M1" false
+rpr o/be 51 OPEN sprint/m1 dev "Sprint M1" true
+expect "ws: a draft sprint PR in any repo means wrap, not awaiting-merge" "wrap 1" "$(wak pick)"
+jq 'map(.isDraft = false)' "$FAKE/prs.json" > "$FAKE/p" && mv "$FAKE/p" "$FAKE/prs.json"
+expect "ws: every sprint PR ready → awaiting-merge" "awaiting-merge" "$(wak pick)"
+expect "ws: awaiting-merge names each repo's sprint PR" "o/be#51" "$(wak pick)"
+expect "ws: wrap get reads the open sprint PRs" "build 0" "$(wak wrap get 1)"
+expect "ws: wrap set writes every open sprint PR" "on o/fe#50" "$(wak wrap set 1 verify)"
+expect "ws: rescue without --repo covers every repo" "fe: rescue: clean" "$(wak rescue)"
+jq 'map(if .number == 50 then .state = "MERGED" | .body = "Closes o/be#2" else . end)' "$FAKE/prs.json" > "$FAKE/p" && mv "$FAKE/p" "$FAKE/prs.json"
+wak housekeeping >/dev/null
+expect "ws: issue stays open while another repo's sprint PR is open" "open" "$(state 2)"
+jq 'map(if .number == 51 then .state = "MERGED" | .body = "Closes #2" else . end)' "$FAKE/prs.json" > "$FAKE/p" && mv "$FAKE/p" "$FAKE/prs.json"
+wak housekeeping >/dev/null
+expect "ws: issue closes when every repo's sprint PR merged" "closed" "$(state 2)"
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

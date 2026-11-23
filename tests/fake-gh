@@ -6,11 +6,11 @@ set -euo pipefail
 F="${FAKE:?set FAKE to the fixture folder}"
 echo "gh $*" >> "$F/log"
 
-jqf=""; args=()
+jqf=""; args=(); R=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --jq) jqf="$2"; shift 2;;
-    -R) shift 2;;
+    -R) R="$2"; shift 2;;
     --paginate|--force) shift;;
     *) args+=("$1"); shift;;
   esac
@@ -21,6 +21,8 @@ opt() { # opt <name>: value of --name in the remaining args
   local want="$1" prev=""; for a in "${args[@]}"; do [ "$prev" = "$want" ] && { printf '%s' "$a"; return; }; prev="$a"; done
 }
 upd() { local f="$1" q="$2"; jq "$q" "$F/$f" > "$F/$f.tmp" && mv "$F/$f.tmp" "$F/$f"; }
+# PRs may carry a "repo" field (workspace tests); -R then selects that repo's PRs only.
+inr() { printf '(.repo == null or "%s" == "" or .repo == "%s")' "$R" "$R"; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 me() { cat "$F/me" 2>/dev/null || echo agent; }
 
@@ -88,9 +90,9 @@ case "${1:-}" in
     case "$2" in
       list)
         st="$(opt --state)"; hd="$(opt --head)"
-        jq --arg st "$st" --arg hd "$hd" '[.[] | select(($st == "all" or ($st | ascii_upcase) == .state) and ($hd == "" or .headRefName == $hd))]' "$F/prs.json" | out;;
-      view) jq ".[] | select(.number == $3)" "$F/prs.json" | out;;
-      merge) upd prs.json "map(if .number == $3 then .state = \"MERGED\" else . end)";;
+        jq --arg st "$st" --arg hd "$hd" "[.[] | select($(inr)) | select((\$st == \"all\" or (\$st | ascii_upcase) == .state) and (\$hd == \"\" or .headRefName == \$hd))]" "$F/prs.json" | out;;
+      view) jq ".[] | select(.number == $3 and $(inr))" "$F/prs.json" | out;;
+      merge) upd prs.json "map(if .number == $3 and $(inr) then .state = \"MERGED\" else . end)";;
       edit|ready|create|review) :;;
       *) echo "fake-gh: unhandled pr $2" >&2; exit 1;;
     esac;;

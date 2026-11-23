@@ -4,6 +4,10 @@ Every role follows these rules in every run. Project rules in `AGENTS.md` and th
 
 These are written rules. For unattended runs, the harness should also enforce the most important ones: see "Unattended permission profile" in the adapter for your tool. The kit's script enforces the merge and close rules itself.
 
+## Workspace
+
+If `.agentkit/config` has a `[workspace]` section, the project root holds several code repos ([workspace.md](workspace.md)). Work only inside the repo your task's **Repo** line names (`cd <project root>/<repo>`), use that repo's commands (`repo.<repo>.<command>` in the config, else `commands.<command>`), and pass `--repo <repo>` to every `agentkit` git or PR command. Issue numbers always refer to the tracker repo.
+
 ## Never, for any role
 
 | Category | Forbidden |

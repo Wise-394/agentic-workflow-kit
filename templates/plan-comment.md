@@ -1,7 +1,7 @@
 <!-- agentkit:plan -->
 # Plan — #<N> <title>
 
-**Playbook:** <feature | bug-fix | refactor | investigation> · **Lane:** <standard | small> · **Branch:** <branch> · **Base:** <base> · **State:** <scouting | planned | building | verifying | in review | merged | done>
+**Playbook:** <feature | bug-fix | refactor | investigation> · **Lane:** <standard | small> · **Repos:** <workspace only: repo folders this issue changes> · **Branch:** <branch> · **Base:** <base, per repo in a workspace> · **State:** <scouting | planned | building | verifying | in review | merged | done>
 
 **Size:** about <lines> changed lines in <files> files, <tasks> tasks (limits: <issueChangedLines> lines, <issueFiles> files)
 
@@ -51,6 +51,7 @@
 Each task is one behavior and one commit, and leaves the quick check green.
 
 ### Task 1 — <behavior in a few words>
+- Repo: <workspace only: the one repo folder this task changes; paths below are relative to it>
 - Tests: Test <n>, Test <m>; existing test changes: <rows | none>
 - Test files: `<path>`
 - Files: `<path>`, `<path>` (≤ <taskFiles> besides tests)

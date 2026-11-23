@@ -11,6 +11,8 @@ You are the **planner**. You make every decision, write the plan, start the work
 
 **Read first:** the project's `AGENTS.md`, [reference/safety.md](../../reference/safety.md), and [reference/tracker.md](../../reference/tracker.md). Settings come from `.agentkit/config` (`git config -f .agentkit/config --list`).
 
+**Workspace:** if `.agentkit/config` has a `[workspace]` section, also read [reference/workspace.md](../../reference/workspace.md): issues live in the tracker repo, code in several repos, and every git or PR command below takes `--repo <folder>`, run once per repo the plan lists.
+
 ## Modes
 
 | Mode | How it starts | What changes |
@@ -67,7 +69,7 @@ Roles: [scout](../../roles/scout.md), [test-writer](../../roles/test-writer.md),
 
 ## 4. Branch
 
-`agentkit branch <N>` creates or resumes the issue branch from the issue's base (its milestone's sprint branch, or the integration branch). Write **Branch** and **Base** into the plan. Set **State: building**.
+`agentkit branch <N>` creates or resumes the issue branch from the issue's base (its milestone's sprint branch, or the integration branch). Write **Branch** and **Base** into the plan. Workspace: once per repo in the plan's **Repos** (`--repo <r>`); write each repo's base. Set **State: building**.
 
 ## 5. Build, one task at a time
 
@@ -95,7 +97,7 @@ For each task not in `agentkit progress <N>`, in order:
 ## 7. Pull request
 
 1. Write the PR body from [templates/pr-body.md](../../templates/pr-body.md): the `check-full` output with its head sha as the **Checks** line, the verifier's evidence rows (redacted, see the safety baseline), every `assumed` line of the **Decision log** as **Assumptions**, and the plan's **Follow-ups**.
-2. `agentkit open-pr <N> <body-file>` (it also sets `status:in-review`). Set **State: in review**.
+2. `agentkit open-pr <N> <body-file>` (it also sets `status:in-review`). Set **State: in review**. Workspace: one PR per touched repo, each body opening with `Closes <tracker repo>#<N>` and linking the others; steps 8 and 9 then run per PR.
 
 ## 8. Independent review
 
