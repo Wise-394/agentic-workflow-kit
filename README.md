@@ -8,8 +8,8 @@ agentkit is a plugin for coding agents such as Claude Code, opencode, and Codex.
 flowchart LR
     P[Plan together<br/>PRD, design, issues] --> B[M0 bootstrap<br/>skeleton, CI, docs]
     B --> I[Agents build<br/>one issue at a time]
-    I -->|needs a decision| Q[Question on the issue<br/>you reply]
-    Q --> I
+    I -->|open point| D[Agent decides<br/>records the assumption]
+    D --> I
     I --> W[Sprint wrap-up<br/>verify, review, retro]
     W --> M[You merge<br/>the sprint PR]
     M --> I
@@ -47,7 +47,7 @@ Each issue is built by a team of roles. The thinking-heavy roles get your strong
 
 | Step | Who | What happens |
 |---|---|---|
-| Intake | planner | Checks the issue is trusted, ready, and small enough. Splits it or asks you if not |
+| Intake | planner | Checks the issue is trusted, ready, and small enough. Splits it itself if it's too big |
 | Scout | scout | Finds the existing names, helpers, and patterns, with `file:line` |
 | Plan | planner | Writes contracts, error cases, tests, and tasks into one plan comment on the issue |
 | Build | test-writer, coder | Per task: a failing test first, then the code. Fresh agents for every task |
@@ -56,7 +56,7 @@ Each issue is built by a team of roles. The thinking-heavy roles get your strong
 | Review | your review skill (optional), then pr-reviewer | Spec compliance, then code quality. Blockers come back as fix tasks |
 | Merge | `agentkit merge` | Into the sprint branch, only with an approval on the exact head commit and passing checks |
 
-When every issue in a milestone is merged, wrap-up runs a sprint-wide check, a cross-issue review, and a retro that proposes new rules. Then the sprint PR is marked ready, and **you merge it**. Agents never merge a sprint into your main line.
+When every issue in a milestone is merged, wrap-up runs a sprint-wide check, a cross-issue review, and a retro that proposes new rules. Then the sprint PR is marked ready with every assumption listed, and **you merge it**. Agents never merge a sprint into your main line.
 
 **Model tiers.** *thinking* (planner, pr-reviewer) makes the decisions and judges quality. *working* (scout, test-writer, coder, verifier) carries them out. A stuck task gets one retry on the thinking model before you're asked.
 
@@ -72,7 +72,8 @@ agentkit orchestrates; it doesn't rebuild what good skills already do. During se
 
 ## Talking to the agents
 
-- **Questions.** When an agent needs a decision, it posts a question on the issue, labels it `status:needs-input`, and moves on to other work. Reply in a comment; the next run picks it up.
+- **No questions, no waiting.** The loop runs on its own. When an issue leaves something open, the agent finds it in the docs and code, or makes the smallest choice that's easy to undo and records it as an assumption. Every assumption is listed in the sprint PR, so you review them all when you merge.
+- **Blocked issues.** Only an issue with no safe way on is blocked, for example one that needs a secret. Your runner gets the reason in the result line; the loop goes on with other work. Fix the cause, then run `agentkit unblock <N>`.
 - **Pausing.** Label any open issue `agentkit:pause` (works from your phone) to stop unattended runs. Close that issue to resume.
 - **Changing the plan.** Say *"update the plan"*. The agent revises the docs and issues through a PR you approve.
 

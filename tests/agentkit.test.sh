@@ -76,7 +76,7 @@ fresh
 issue 2 type:feature 1
 issue 3 type:feature 1 stranger NONE
 issue 4 type:feature,status:in-progress 1
-issue 5 type:feature,status:needs-input 1
+issue 5 type:feature,status:blocked 1
 issue 6 type:feature 1 stranger NONE
 jq '(.[] | select(.number == 6) | .labels) += [{name: "agentkit:ready"}]' "$FAKE/issues.json" > "$FAKE/i" && mv "$FAKE/i" "$FAKE/issues.json"
 echo '{"data":{"repository":{"issue":{"lastEditedAt":null,"timelineItems":{"nodes":[{"createdAt":"2026-01-01T00:00:00Z","label":{"name":"agentkit:ready"}}]}}}}}' > "$FAKE/graphql/6.json"
@@ -87,7 +87,7 @@ expect "ready: trusted issue starts" "start" "$(ak ready 2)"
 expect "ready: no fuzzy match on #12 or 'Sprint 2'" "start" "$(ak ready 2)"
 expect "ready: untrusted author is refused" "untrusted" "$(ak ready 3)"
 expect "ready: in-progress resumes" "resume" "$(ak ready 4)"
-expect "ready: needs-input is not ready" "status:needs-input" "$(ak ready 5)"
+expect "ready: blocked is not ready" "status:blocked" "$(ak ready 5)"
 expect "ready: agentkit:ready label after last edit trusts it" "start" "$(ak ready 6)"
 expect "ready: verify issues are wrap-up only" "verify issues" "$(ak ready 7)"
 pr 30 MERGED feat/2-issue-2 sprint/m1 "feat(#2): Issue 2"
@@ -119,26 +119,22 @@ jq '(.[] | select(.number == 50) | .labels) += [{name: "agentkit:pause"}]' "$FAK
 expect "pick: pause label pauses" "paused" "$(ak pick)"
 jq 'map(select(.number != 50))' "$FAKE/issues.json" > "$FAKE/i" && mv "$FAKE/i" "$FAKE/issues.json"
 touch "$W/.agentkit/PAUSE"; expect "pick: pause file pauses" "paused" "$(ak pick)"; rm "$W/.agentkit/PAUSE"
-jq 'map(if .number == 2 then .labels = [{name:"type:feature"},{name:"status:needs-input"}] else . end)' "$FAKE/issues.json" > "$FAKE/i" && mv "$FAKE/i" "$FAKE/issues.json"
+jq 'map(if .number == 2 then .labels = [{name:"type:feature"},{name:"status:blocked"}] else . end)' "$FAKE/issues.json" > "$FAKE/i" && mv "$FAKE/i" "$FAKE/issues.json"
 pr 40 OPEN sprint/m1 main "Sprint M1" true
 expect "pick: nothing ready, sprint has merged work → wrap" "wrap 1" "$(ak pick)"
 jq 'map(if .number == 40 then .isDraft = false else . end)' "$FAKE/prs.json" > "$FAKE/p" && mv "$FAKE/p" "$FAKE/prs.json"
 expect "pick: sprint PR ready → awaiting-merge" "awaiting-merge 40" "$(ak pick)"
-expect "status: JSON with parked issue" '"parked":[2]' "$(ak status)"
+expect "status: JSON with blocked issue" '"blocked":[2]' "$(ak status)"
 expect "base: milestone issue targets its sprint branch" "sprint/m1" "$(ak base 2)"
 issue 60 type:bug -
 expect "base: issue without milestone targets integration" "main" "$(ak base 60)"
 
-# ---------- housekeeping: answers, splits, investigations ---------------------
+# ---------- housekeeping: splits, investigations, old labels, unblock --------
 
 fresh
 issue 2 type:feature,status:needs-input 1
-comment 2 agent OWNER 2026-01-01T00:00:00Z "<!-- agentkit:question -->
-Which color?"
-issue 3 type:feature,status:needs-input 1
-comment 3 agent OWNER 2026-01-01T00:00:00Z "<!-- agentkit:question -->
-Which size?"
-comment 3 stranger NONE 2026-01-02T00:00:00Z "use 12"
+comment 2 owner OWNER 2026-01-02T00:00:00Z "Blue."
+issue 3 type:feature 1
 issue 4 type:feature,status:split 1
 comment 4 agent OWNER 2026-01-01T00:00:00Z "<!-- agentkit:split #5 #6 -->"
 issue 5 type:feature 1; issue 6 type:feature 1
@@ -146,11 +142,18 @@ jq 'map(if .number == 5 or .number == 6 then .state = "closed" else . end)' "$FA
 issue 7 type:investigation 1
 comment 7 agent OWNER 2026-01-01T00:00:00Z "<!-- agentkit:findings -->
 Answer"
-comment 2 owner OWNER 2026-01-02T00:00:00Z "Blue."
 out="$(ak housekeeping)"
-expect "housekeeping: trusted reply un-parks" "#2: answered by owner" "$out"
-expect_not "housekeeping: untrusted reply is ignored" "#3: answered" "$out"
-expect "housekeeping: label removed" "type:feature" "$(labels 2)"; expect_not "housekeeping: needs-input gone" "needs-input" "$(labels 2)"
+expect "housekeeping: old needs-input becomes blocked" "status:blocked" "$(labels 2)"
+expect_not "housekeeping: a comment never un-blocks" "needs-input" "$(labels 2)"
+expect "housekeeping: reports the old label" "older kit" "$out"
+printf 'Needs a Stripe key.\nAdd STRIPE_KEY to the runner.\n' > "$T/why"
+expect "block: sets the label" "#3 blocked" "$(ak block 3 "$T/why")"
+expect "block: status" "status:blocked" "$(labels 3)"
+expect "result: blocked carries the reason" 'Needs a Stripe key.' "$(ak result blocked 3)"
+expect "pick: only blocked issues left is idle" "every remaining issue is blocked" "$(ak pick)"
+expect "unblock: clears the label" "#3 unblocked" "$(ak unblock 3)"
+expect_not "unblock: status gone" "status:blocked" "$(labels 3)"
+expect "unblock: refuses an issue that isn't blocked" "not blocked" "$(ak unblock 3)"
 expect "housekeeping: split closes when parts are closed" "closed" "$(state 4)"
 expect "housekeeping: investigation with findings closes" "closed" "$(state 7)"
 
@@ -159,14 +162,14 @@ expect "housekeeping: investigation with findings closes" "closed" "$(state 7)"
 fresh
 git -C "$W" config -f .agentkit/config git.integrationBranch dev
 issue 2 type:feature,status:merged 1
-issue 3 type:feature,status:needs-input 1
+issue 3 type:feature,status:blocked 1
 issue 4 type:verify 1
 pr 40 MERGED sprint/m1 dev "Sprint M1"
 jq 'map(if .number == 40 then .body = "Closes #2\nCloses #4" else . end)' "$FAKE/prs.json" > "$FAKE/p" && mv "$FAKE/p" "$FAKE/prs.json"
 out="$(ak housekeeping)"
 expect "sprint merged: issue closed" "closed" "$(state 2)"
 expect "sprint merged: verify issue closed" "closed" "$(state 4)"
-expect "sprint merged: parked issue carried over" "carried over to M2" "$out"
+expect "sprint merged: blocked issue carried over" "carried over to M2" "$out"
 expect "sprint merged: milestone closed" "milestone 1: closed" "$out"
 
 # ---------- result ------------------------------------------------------------
@@ -273,12 +276,13 @@ issue 3 type:feature,status:merged 1; issue 4 type:feature,status:merged 1
 pr 33 MERGED feat/3-issue-3 sprint/m1 "feat(#3): Issue 3"; pr 34 MERGED feat/4-issue-4 sprint/m1 "feat(#4): Issue 4"
 issue 5 type:feature 1 agent NONE "Blocked by #2"
 expect "blockers: a split whose parts are merged clears" "start" "$(ak ready 5)"
-expect "result: a split counts as parked" '"outcome":"parked"' "$(ak result parked 2)"
+expect "result: a split ends the session with continue" '"outcome":"continue"' "$(ak result continue 2)"
+expect "result: parked no longer exists" '"outcome":"error"' "$(ak result parked 2)"
 
 fresh
 git -C "$W" config -f .agentkit/config git.integrationBranch dev
 jq 'map(select(.number == 1))' "$FAKE/milestones.json" > "$FAKE/m" && mv "$FAKE/m" "$FAKE/milestones.json"
-issue 3 type:feature,status:needs-input 1
+issue 3 type:feature,status:blocked 1
 pr 40 MERGED sprint/m1 dev "Sprint M1"
 expect "carry-over: creates the next milestone when none exists" "created milestone M2: Carry-over" "$(ak housekeeping)"
 

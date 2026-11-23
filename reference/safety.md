@@ -15,11 +15,11 @@ These are written rules. For unattended runs, the harness should also enforce th
 | Bypassing the script | `gh pr merge` (use `agentkit merge`), `gh issue close` (closing follows the tracker rules through the script), any `gh api` write to merges, refs, branches, branch protection, or repository settings |
 | Machine | `sudo`; `git config --global`; `curl`/`wget` piped into a shell; running a package that isn't installed (`npx <pkg>` that downloads, `pnpm dlx`, `yarn dlx`, `uvx`, `pipx run`) |
 | Secrets | Reading or editing `.env*` at any depth, key files (`*.pem`, `*.key`), or credential stores; printing tokens or environment values |
-| Dependencies | Adding, removing, or upgrading packages, unless the plan names the exact package and version and the user approved it in the decision log or the design doc |
+| Dependencies | Adding, removing, or upgrading packages, unless `docs/design.md` or a decision record names the package, or the plan names the exact package and version as a recorded assumption (see "Deciding without a person") |
 | Tracker | Deleting comments, editing other people's comments, changing labels or milestones outside the script, changing repository settings |
 | Project | Anything in the project's `forbidden.command` list |
 
-Bringing a branch up to date uses `agentkit sync`, which merges and never rebases. A conflict aborts the merge and becomes a question to the user.
+Bringing a branch up to date uses `agentkit sync`, which merges and never rebases. A conflict aborts the merge and blocks the issue (`agentkit block`).
 
 ## Evidence and redaction
 
@@ -61,6 +61,20 @@ Numbers come from `[limits]` in `.agentkit/config`.
 
 **Scope:** a worker never edits a file that isn't on its task's list. Needing one is a stop condition, not a judgment call.
 
-## When unsure
+## Deciding without a person
 
-Park the issue with a question (`agentkit ask`). A parked issue costs minutes; an unwanted push, merge, or deleted file can cost the user their work.
+The loop never waits for a person. Agents don't ask questions on the tracker and never wait for a comment. When the issue leaves something open, the planner works down this ladder:
+
+1. **Find it.** Look in the issue body, `docs/prd.md`, `docs/design.md`, `docs/decisions/`, `AGENTS.md`, the project docs, and the code. If the answer is there, use it and cite it in the plan's **Decision log**.
+2. **Decide it.** If it isn't there but a careful engineer could choose, choose: the smallest option, the easiest to undo, consistent with the design principles and the existing patterns. Record it in the **Decision log** as `assumed`, with the reason, and list it under **Assumptions** in the PR body. A design-level choice (a new dependency, a schema, a public interface, a change to the architecture) also gets a decision record `docs/decisions/NNNN-<slug>.md` with `Status: assumed`, committed in the same PR. The sprint PR collects every assumption, so the user reviews them all when merging the sprint. That merge is the person's checkpoint.
+3. **Block it**, only when no safe choice exists:
+   - it needs a secret, a credential, an account, a payment, or a forbidden command;
+   - every option would break a "must never happen" in the PRD, or the PRD contradicts itself on a `must`;
+   - the issue has no goal at all;
+   - a limit in the table above was hit, or a merge conflict can't be resolved by `agentkit sync`.
+
+   Write the reason in one short first line, then what you tried and what would unblock it, and run `agentkit block <N> <file>`. The session ends `blocked`; the runner gets the reason in the result line, and the loop goes on with other issues. Someone fixes the cause outside the loop (a doc, a secret, the config) and runs `agentkit unblock <N>`.
+
+Never block on a question of taste or wording; decide it and record it. A recorded assumption costs the user a minute at sprint review. An unwanted push, merge, or deleted file can cost them their work, so the "never" table above is not on this ladder: those are never assumed.
+
+**Interactive runs** (the user is in the session): ask the user in the session instead of assuming, and record the answer in the **Decision log**. Still nothing goes on the tracker as a question.

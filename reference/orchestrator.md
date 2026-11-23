@@ -28,12 +28,11 @@ The script checks the outcome against the tracker before printing it, so a sessi
 | Outcome | Meaning | Suggested runner action |
 |---|---|---|
 | `merged` | An issue was merged into its sprint branch, or a wrap-up phase finished | Run again |
-| `continue` | Checkpoint mid-issue (`limits.tasksPerSession`), or CI still running on a PR | Run again (wait a few minutes if CI is slow) |
-| `parked` | A question waits on the issue (`status:needs-input`) | Notify the user; run again (other issues may be ready) |
-| `blocked` | A limit was hit (`status:blocked`) | Notify the user; run again |
+| `continue` | Checkpoint mid-issue (`limits.tasksPerSession`), an issue was split into parts, or CI still running on a PR | Run again (wait a few minutes if CI is slow) |
+| `blocked` | The issue can't go on safely (`status:blocked`); `note` holds the reason, for example a missing secret | Run again (other issues go on). Fix the cause yourself if you can, or notify the user, then `agentkit unblock <N>` |
 | `milestone-complete` | Wrap-up done; the sprint PR is ready for the user | Notify the user to review and merge it |
 | `awaiting-merge` | The sprint PR is still waiting for the user | Wait (for example an hour), then run again |
-| `idle` | Nothing ready: all remaining issues wait for answers, or no open milestone | Wait, then run again |
+| `idle` | Nothing ready: every remaining issue is blocked, or no open milestone | Fix the blocks, or wait; then run again |
 | `paused` | An open issue is labelled `agentkit:pause`, or `.agentkit/PAUSE` exists | Wait |
 | `error` | Preflight failed (including `locked` by another runner), a script failed, or the claimed outcome didn't match the tracker | Notify; back off. **No result line at all also means `error`** |
 
@@ -51,6 +50,14 @@ The script checks the outcome against the tracker before printing it, so a sessi
 
 Open any issue and label it `agentkit:pause` (works from a phone), or create `.agentkit/PAUSE` in the checkout. Every session returns `paused` until the issue is closed or the file is removed. A session already running finishes its current step first.
 
-## Answering questions
+## No questions, no waiting
 
-Parked issues carry a comment starting with `<!-- agentkit:question -->`. Reply in a normal comment on that issue. The next session's housekeeping sees a trusted reply newer than the question, clears the label, and the issue becomes ready again.
+The loop never asks a person and never waits for a reply. When an issue leaves something open, the agent finds the answer in the docs and code, or decides and records the assumption; see "Deciding without a person" in [safety.md](safety.md). Every assumption is listed in the sprint PR, so you review them all when you merge the sprint.
+
+Only an issue with no safe way on is blocked. You hear about it through the `blocked` result and its `note`, not through a comment. Fix the cause (add the secret, change a doc, raise a limit), then:
+
+```bash
+<kit>/scripts/agentkit unblock <N>
+```
+
+The issue is ready again with a fresh session count. Blocked issues that are still blocked when you merge the sprint PR move to the next milestone.

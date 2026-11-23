@@ -15,9 +15,9 @@ You are the **planner**. You make every decision, write the plan, start the work
 
 | Mode | How it starts | What changes |
 |---|---|---|
-| **interactive** | The user asks in a session | Questions go to the user in the session, and are also posted with `agentkit ask` so they survive the session |
-| **unattended** | Called by agentkit-next | Never wait. Every question parks the issue with `agentkit ask` and the run ends `parked` |
-| `--plan-only` | The user adds it | Stop after step 3 with an "approve this plan" question. The user's reply is the approval |
+| **interactive** | The user asks in a session | Open points go to the user in the session; answers go into the **Decision log** |
+| **unattended** | Called by agentkit-next | Never ask, never wait. Open points are found, or decided and recorded as assumptions; only an unsafe one blocks ("Deciding without a person" in the safety baseline) |
+| `--plan-only` | The user adds it | Stop after step 3 and show the plan in the session. To build it, the user runs `agentkit-run-issue #N` again; it resumes from the saved plan |
 | `--step` | The user adds it | After each task, show the diff and wait for the user's OK. The task review also runs its quality pass |
 
 ## Lanes
@@ -43,15 +43,14 @@ Roles: [scout](../../roles/scout.md), [test-writer](../../roles/test-writer.md),
 2. `agentkit housekeeping`, then `agentkit rescue`.
 3. `agentkit ready <N>`. `no: …` means stop and tell the user the reason. In unattended mode, end `idle`. `start`: go to step 1. `resume`:
    1. `agentkit claim <N>`, and read the plan (`agentkit plan get <N>`) and its **State**.
-   2. **Answers:** read the trusted comments newer than the latest `<!-- agentkit:question -->`. Copy each answer into the **Decision log** with a link, update the plan, and save it. If the answer approves a split, create the parts (`agentkit new-issue`) and `agentkit split <N> <parts…>`, then stop (`parked`). If it approves a `--plan-only` plan, continue at step 4.
-   3. If **State** is building or later: `agentkit branch <N>` first, so every later step runs on the issue's own branch. The script refuses to commit, sync, or open a PR from any other branch. Then `agentkit progress <N>`: the commits are the truth about finished tasks.
-   4. Continue at the step for the State: scouting → 2, planned → 4, building → 5, verifying → 6. For in review, run `agentkit can-merge <PR>` first. If only `checks: PENDING` fails, stop (`continue`). If the review is already approved on the head, go to 9. Otherwise go to 8.
+   2. If **State** is building or later: `agentkit branch <N>` first, so every later step runs on the issue's own branch. The script refuses to commit, sync, or open a PR from any other branch. Then `agentkit progress <N>`: the commits are the truth about finished tasks.
+   3. Continue at the step for the State: scouting → 2, planned → 4, building → 5, verifying → 6. For in review, run `agentkit can-merge <PR>` first. If only `checks: PENDING` fails, stop (`continue`). If the review is already approved on the head, go to 9. Otherwise go to 8.
 
 ## 1. Intake
 
 1. `agentkit claim <N>`.
 2. Read the issue (`gh issue view <N> --comments`), keeping only trusted comments as context. Read the `docs/prd.md` rows for the requirement IDs it names, and the parts of `docs/design.md` it touches.
-3. **Definition of Ready:** check every line in [split.md](../agentkit-plan/references/split.md). A missing goal, acceptance tests, or an open product question: ask and stop. Too big: write the split proposal (that file's "How to split an issue") as the question and stop. When the user approves, create the parts (`agentkit new-issue`), then `agentkit split <N> <parts…>`. The run ends `parked` for this issue; the parts are new ready work.
+3. **Definition of Ready:** check every line in [split.md](../agentkit-plan/references/split.md). A gap is closed with "Deciding without a person" in the safety baseline: missing acceptance tests are written from the PRD rows the issue names and recorded as assumptions; no goal at all blocks it. Too big: split it yourself with that file's "How to split an issue", create the parts (`agentkit new-issue`), then `agentkit split <N> <parts…>`. The run ends `continue` for this issue; the parts are new ready work. Interactive: show the split first and create it after the user's yes.
 4. Choose the playbook ([playbooks.md](references/playbooks.md)). An investigation follows its playbook and ends with `agentkit findings <N> <file>`.
 
 ## 2. Scout
@@ -63,8 +62,8 @@ Roles: [scout](../../roles/scout.md), [test-writer](../../roles/test-writer.md),
 
 1. Fill the plan with [write-plan.md](references/write-plan.md). Set **State: planned**. Save it.
 2. Over the size limits: split instead (step 1.3).
-3. Questions only the user can answer: `agentkit ask <N> <file>`, all in one comment, and stop (`parked`). Interactive: if the user answers in the session, copy each answer into the **Decision log**, run `agentkit set-status <N> in-progress`, and continue. Otherwise the next run reads the reply (step 0.3).
-4. `--plan-only`: ask "Approve this plan? Reply with changes, or 'approved'." and stop.
+3. **Open points.** Each one goes down the ladder in "Deciding without a person": found in the docs, or decided and recorded as `assumed` in the **Decision log**. Interactive: ask the user in the session instead, and record the answer. Only an unsafe one blocks: `agentkit block <N> <file>`, stop (`blocked`).
+4. `--plan-only`: show the plan and its assumptions, and stop. Running `agentkit-run-issue #N` again builds it.
 
 ## 4. Branch
 
@@ -79,7 +78,7 @@ For each task not in `agentkit progress <N>`, in order:
 3. **Check and commit.** `agentkit check-task <N> <k>/<n> "<commit message>" --tests <test files> --files <files>`. It formats, tests, runs the quick check, and commits and pushes only on `Result: ALL PASS`. On `FAILED`, start the coder with the failing lines, then check again.
 4. **Spec check.** Read the task's commit (`git show HEAD`, every new file in full). The task's tests exist with the planned names, the contract names and shapes match, and nothing beyond the task was built. A miss becomes a **Review findings** row, fixed by the coder (or test-writer) and committed with the same `Task: k/n`. In `--step` mode also review quality against `docs/clean-code.md`, then show the user the diff and wait for an OK.
 
-**Rounds.** Each trip back to a worker on a task counts toward `limits.taskRounds`; record it in **Counters**. At the limit, if the plan is right, run the task once more on the `thinking` model (escalation, unless `models.escalation = none`). Still stuck: `agentkit ask <N> <file> blocked` with the task, each attempt, and what you need. Stop (`blocked`).
+**Rounds.** Each trip back to a worker on a task counts toward `limits.taskRounds`; record it in **Counters**. At the limit, if the plan is right, run the task once more on the `thinking` model (escalation, unless `models.escalation = none`). Still stuck: `agentkit block <N> <file>` with the task, each attempt, and what would unblock it. Stop (`blocked`).
 
 **Checkpoint.** After `limits.tasksPerSession` tasks in this session, save the plan (State: building) and stop (`continue`). The next session resumes at the next task.
 
@@ -95,7 +94,7 @@ For each task not in `agentkit progress <N>`, in order:
 
 ## 7. Pull request
 
-1. Write the PR body from [templates/pr-body.md](../../templates/pr-body.md): the `check-full` output with its head sha as the **Checks** line, the verifier's evidence rows (redacted, see the safety baseline), and the plan's **Follow-ups**.
+1. Write the PR body from [templates/pr-body.md](../../templates/pr-body.md): the `check-full` output with its head sha as the **Checks** line, the verifier's evidence rows (redacted, see the safety baseline), every `assumed` line of the **Decision log** as **Assumptions**, and the plan's **Follow-ups**.
 2. `agentkit open-pr <N> <body-file>` (it also sets `status:in-review`). Set **State: in review**.
 
 ## 8. Independent review
@@ -103,12 +102,12 @@ For each task not in `agentkit progress <N>`, in order:
 1. **Slots first.** If `slots.securityReview` names a skill and the change touches input handling, auth, secrets, queries, or dependencies, run it. If `slots.review` names a skill, run it. Run each in a fresh subagent that gets only the PR number and the issue number, and keep their findings.
 2. **The gate.** Start a fresh pr-reviewer with the issue number, the PR number, and the slot findings, if any. It follows [review.md](references/review.md) and posts its verdict with `agentkit review-post`. It never gets the plan or your summary.
 3. **Changes requested:** copy blockers and majors into **Review findings**, minors into **Follow-ups**. Fix them as one extra task (step 5, test-writer first if a test is missing or weak), run `agentkit check-full <N>`, update the PR body (`agentkit open-pr` again), and start a fresh pr-reviewer with the previously reviewed sha.
-4. After `limits.reviewRounds` reviews still requesting changes: ask the user with the open findings, `blocked`, and stop.
+4. After `limits.reviewRounds` reviews still requesting changes: `agentkit block <N> <file>` with the open findings, and stop (`blocked`).
 5. Any commit after an approval needs a new review before merging.
 
 ## 9. Merge
 
-`agentkit merge <PR>`. The script checks every condition (approval on the head, checks, evidence, no parked issue), merges with `--match-head-commit`, and labels or closes the issue. If it says `checks: PENDING`, CI is still running: stop (`continue`); the next session resumes here.
+`agentkit merge <PR>`. The script checks every condition (approval on the head, checks, evidence, issue not blocked), merges with `--match-head-commit`, and labels or closes the issue. If it says `checks: PENDING`, CI is still running: stop (`continue`); the next session resumes here.
 
 - Into a sprint branch: the issue becomes `status:merged`. Set **State: merged**. The run ends `merged`.
 - Into the integration branch with `merge.issues = user`: it prints "ready to merge". Tell the user. The run ends `merged` once they merge it.

@@ -8,7 +8,7 @@ For the milestone:
 
 1. Every review on its PRs: findings with severity, and **rule proposals**.
 2. Every **Follow-ups** list in its PR bodies.
-3. Every issue that was parked or blocked, with the reason.
+3. Every issue that was blocked, with the reason, and every recorded assumption.
 4. The **Counters** of each plan (task rounds, escalations, review rounds) and the sessions each issue used.
 
 ## 2. Group

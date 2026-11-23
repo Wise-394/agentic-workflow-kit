@@ -89,4 +89,4 @@ Each task is one behavior and one commit, and leaves the quick check green.
 
 ## Decision log
 
-- <date> — <decision> — <why, with the doc, code line, or the user's answer (link) it came from>
+- <date> — <decision> — <source: doc or code line | user (interactive) | assumed: why this option>

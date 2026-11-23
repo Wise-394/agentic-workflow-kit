@@ -15,10 +15,10 @@ You are the **planner**. A sprint is one milestone (`M<k>: <name>`), one sprint 
 2. `agentkit milestone M<k>` prints the milestone's number; the commands below take that number. `agentkit ensure-sprint <number>` creates the sprint branch and draft PR if missing and prints both.
 3. Post the planned order into the sprint PR body's issue table (`agentkit pr-body`). Don't wait for a reply; the user can stop you at any time.
 4. Loop: `agentkit pick <milestone-number>`.
-   - `start <N>` or `resume <N>`: run [agentkit-run-issue](../agentkit-run-issue/SKILL.md) on `#N`. Each issue starts clean: re-read its issue and plan from the tracker, and carry nothing over from earlier issues in your head. If your harness can start a fresh session per issue, do. An issue that ends `parked` or `blocked` stays that way; continue with the next pick. Its question goes in the final report.
+   - `start <N>` or `resume <N>`: run [agentkit-run-issue](../agentkit-run-issue/SKILL.md) on `#N`. Each issue starts clean: re-read its issue and plan from the tracker, and carry nothing over from earlier issues in your head. If your harness can start a fresh session per issue, do. An issue that ends `blocked` stays that way; continue with the next pick. Its reason goes in the final report.
    - `wrap <milestone>`: run the wrap-up phases below until the phase is `ready`.
    - `awaiting-merge`, `idle`, `paused`: stop and report.
-5. **Report**, in one message: each merged issue with its PR; each stuck issue with its exact question; open failures; retro proposals; the sprint PR link; numbered checks only a person can do; and "ready for you to merge".
+5. **Report**, in one message: each merged issue with its PR; each blocked issue with its reason and what would unblock it; every assumption agents recorded; open failures; retro proposals; the sprint PR link; numbered checks only a person can do; and "ready for you to merge".
 
 ## Wrap-up
 
@@ -27,12 +27,12 @@ The phase is stored in the sprint PR body (`agentkit wrap get <milestone>`). Eac
 | Phase | Do | Next phase |
 |---|---|---|
 | `build` | Nothing is left to build: `agentkit wrap set <milestone> verify`, then run `verify` in the same session | `verify` |
-| `verify` | 1. `agentkit sync-sprint <milestone>` (a conflict becomes a question on the verify issue). 2. Check out the sprint branch read-only (`git switch sprint/m<k>`, `git merge --ff-only origin/sprint/m<k>`) and run `agentkit check-full --base <integration branch>`. 3. Start the verifier on the `type:verify` issue: it runs `docs/verify.md` (and the `qa` slot) on the sprint head and returns a result per checklist row. Tick agent rows with real evidence (`agentkit issue-body`); user rows stay open. 4. Each failure becomes a fix issue in this milestone (`agentkit new-issue`) | `review`, or `verify` again with round + 1 if fix issues were created, at most `limits.sprintFixRounds` rounds |
+| `verify` | 1. `agentkit sync-sprint <milestone>` (a conflict blocks the verify issue: `agentkit block`). 2. Check out the sprint branch read-only (`git switch sprint/m<k>`, `git merge --ff-only origin/sprint/m<k>`) and run `agentkit check-full --base <integration branch>`. 3. Start the verifier on the `type:verify` issue: it runs `docs/verify.md` (and the `qa` slot) on the sprint head and returns a result per checklist row. Tick agent rows with real evidence (`agentkit issue-body`); user rows stay open. 4. Each failure becomes a fix issue in this milestone (`agentkit new-issue`) | `review`, or `verify` again with round + 1 if fix issues were created, at most `limits.sprintFixRounds` rounds |
 | `review` | Start a fresh pr-reviewer with the sprint PR number and the milestone's issue numbers, in sprint mode ([review.md](../agentkit-run-issue/references/review.md), "Sprint review"). Blockers and majors become fix issues. Minors and rule proposals are kept for the retro | `retro`, or `verify` with round + 1 after fix issues |
 | `retro` | Follow [retro.md](references/retro.md). It opens one `Retro M<k>` chore issue with no milestone, holding each proposal as a checkbox. Nothing is applied now | `ready` |
-| `ready` | Update the sprint PR body from [templates/sprint-pr-body.md](../../templates/sprint-pr-body.md): `Closes #N` for every merged issue **and** the verify issue, the `check-full` result with its head sha, the verification results, the review verdict, open failures if fix rounds ran out, and the numbered user checks. Then `agentkit wrap set <milestone> ready`, which also marks the PR ready for review | Done. agentkit-next returns `milestone-complete`, then `awaiting-merge` until the user merges |
+| `ready` | Update the sprint PR body from [templates/sprint-pr-body.md](../../templates/sprint-pr-body.md): `Closes #N` for every merged issue **and** the verify issue, the `check-full` result with its head sha, the verification results, the review verdict, every **Assumptions** line from the merged PRs, blocked issues with their reasons, open failures if fix rounds ran out, and the numbered user checks. Then `agentkit wrap set <milestone> ready`, which also marks the PR ready for review | Done. agentkit-next returns `milestone-complete`, then `awaiting-merge` until the user merges |
 
-After the user merges the sprint PR, the next housekeeping closes its issues, carries parked issues over to the next milestone, and closes the milestone. The next milestone becomes active.
+After the user merges the sprint PR, the next housekeeping closes its issues, carries blocked and unfinished issues over to the next milestone, and closes the milestone. The next milestone becomes active.
 
 ## Rules
 

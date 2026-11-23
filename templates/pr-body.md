@@ -25,6 +25,10 @@ Size: <files> files, +<added> −<removed> lines, <tasks> commits (one per task)
 |---|---|---|---|
 | 1 | <behavior> | PASS | <output line, log excerpt, or evidence file name; never secrets> |
 
+## Assumptions
+
+- <decision the docs didn't make> — <why this option> | none
+
 ## Follow-ups
 
 - minor — `<file>:<line>` — <problem> — <rule> | none

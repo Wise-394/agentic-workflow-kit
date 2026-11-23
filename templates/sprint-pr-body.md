@@ -6,11 +6,19 @@ Built by agents, one issue at a time, into this branch. **You merge this PR**; a
 
 | Issue | State | PR |
 |---|---|---|
-| #<N> <title> | merged into sprint \| in progress \| needs input \| blocked | #<PR> |
+| #<N> <title> | merged into sprint \| in progress \| blocked | #<PR> |
 
 ## Closes
 
-<Filled at wrap-up: one "Closes #N" line per merged issue and the verify issue. Parked issues are left out and move to the next milestone when this merges.>
+<Filled at wrap-up: one "Closes #N" line per merged issue and the verify issue. Blocked issues are left out and move to the next milestone when this merges.>
+
+## Assumptions to review
+
+<Filled at wrap-up: every assumption agents recorded in this sprint's PRs and decision records, one line each with its PR. Merging this PR accepts them; change any you disagree with in a follow-up issue.>
+
+## Blocked
+
+<Each blocked issue, its reason, and what would unblock it | none>
 
 ## Sprint verification
 

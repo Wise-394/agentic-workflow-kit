@@ -20,9 +20,9 @@ Changed lines are estimated in the plan and measured by `agentkit check-full` ag
 4. **Out of scope** lists what it won't do, with the issue that owns each item when one exists. A small-lane issue may leave it out.
 5. Every `Blocked by` issue is cleared (see blockers-of in the tracker file).
 6. It fits the issue size rule above, judging by the acceptance tests and the files they need.
-7. No open product question in its comments.
+7. Nothing it needs is unsafe to decide (see "Deciding without a person" in the safety baseline).
 
-`agentkit-run-issue` checks this at intake. A missing line 1, 3, or 7 (or line 2 for an issue that names the PRD) is a question for the user (`agentkit ask`). A failed line 6 means split.
+`agentkit-run-issue` checks this at intake. A missing line 3 (or 2) is filled from the PRD and recorded as an assumption. A missing line 1 or a failed line 7 blocks the issue (`agentkit block`). A failed line 6 means split.
 
 ## INVEST check for every new issue
 
@@ -45,7 +45,7 @@ Then:
 1. Write each piece with [templates/issue.md](../../../templates/issue.md). Every acceptance test of the original lands in exactly one piece.
 2. Each piece's **Out of scope** names the sibling that owns what it leaves out.
 3. Add `Blocked by #N` where one piece needs another.
-4. Show the user the pieces in a table (title, acceptance tests, blockers) and get a yes. Unattended, this table is the `agentkit ask` question, and the yes is the user's reply.
+4. Planning or interactive: show the user the pieces in a table (title, acceptance tests, blockers) and get a yes. Unattended: don't wait; the table goes into the plan's **Decision log** as an assumption.
 5. Create them in blocker order in the same milestone (`agentkit new-issue`), then `agentkit split <original> <pieces…>`. The original gets `status:split`, and housekeeping closes it when every piece is closed.
 
 ## How to split an issue into tasks (in the plan)

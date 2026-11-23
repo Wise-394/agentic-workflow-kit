@@ -13,7 +13,7 @@ TMPD="$(mktemp -d "${TMPDIR:-/tmp}/agentkit.XXXXXX")"
 trap 'rm -rf "$TMPD"' EXIT
 
 TYPES="feat|fix|refactor|spike|chore|verify|docs"
-STATUSES="in-progress needs-input blocked in-review merged split"
+STATUSES="in-progress blocked in-review merged split"
 
 die() { echo "error: $*" >&2; exit 1; }
 say() { printf '%s\n' "$*"; }
@@ -115,8 +115,7 @@ remote_branch_of() { # existing remote issue branch for N
 # ---------- commands: setup and state ---------------------------------------
 
 LABELS='status:in-progress|fbca04|An agent is working on it
-status:needs-input|d93f0b|Waiting for an answer from the user
-status:blocked|b60205|Hit a limit; needs the user
+status:blocked|b60205|Cannot go on safely; the reason is in the result and on the issue
 status:in-review|0e8a16|PR open, review running or done
 status:merged|6f42c1|Merged into its sprint branch; closes when the sprint PR merges
 status:split|c5def5|Split into smaller issues; closes when every part is closed
@@ -233,7 +232,7 @@ cmd_ready() { # ready <N>: prints "start", "resume", or "no: <reason>"
   st="$(status_of "$n")"
   case "$st" in
     in-progress|in-review) say "resume"; return 0;;
-    needs-input|blocked|merged|split) say "no: status:$st"; return 1;;
+    blocked|merged|split) say "no: status:$st"; return 1;;
   esac
   issue_trusted "$n" || { say "no: opened by an untrusted account and not labelled agentkit:ready after its last edit"; return 1; }
   if [ -n "$(comment_id "$n" "<!-- agentkit:plan -->")" ] && [ -z "$(merged_pr_for "$n")" ] && b="$(blockers_cleared "$n")"; then
@@ -258,7 +257,7 @@ cmd_pick() { # pick [milestone-number]: what the next session should do
     if [ "$(type_of "$n")" = "verify" ]; then continue; fi
     case "$(status_of "$n")" in
       merged) done_count=$((done_count+1)); continue;;
-      needs-input|blocked) stuck="$stuck #$n"; continue;;
+      blocked) stuck="$stuck #$n"; continue;;
       split) continue;;
     esac
     r="$(cmd_ready "$n" || true)"
@@ -273,13 +272,13 @@ cmd_pick() { # pick [milestone-number]: what the next session should do
     say "awaiting-merge $(printf '%s' "$spr" | cut -f1)"; return 0
   fi
   if [ "$done_count" -gt 0 ] && [ -n "$spr" ] && [ "$(printf '%s' "$spr" | cut -f2)" = "OPEN" ]; then say "wrap $m"; return 0; fi
-  if [ -n "$stuck" ]; then say "idle waiting for answers on$stuck"; return 0; fi
+  if [ -n "$stuck" ]; then say "idle every remaining issue is blocked:$stuck"; return 0; fi
   say "idle nothing ready in $mt"
 }
 
 cmd_status() { # status: one JSON object for the orchestrator (no model tokens)
   need_conf
-  local p am m="" mt="" sb="" spr="" n s ready="" parked="" blocked="" active="" merged=""
+  local p am m="" mt="" sb="" spr="" n s ready="" blocked="" active="" merged=""
   p="$(cmd_pick)"
   am="$(active_milestone)"
   if [ -n "$am" ]; then
@@ -288,15 +287,15 @@ cmd_status() { # status: one JSON object for the orchestrator (no model tokens)
     for n in $(milestone_issues "$m" | sort -n); do
       s="$(status_of "$n")"
       case "$s" in
-        needs-input) parked="$parked,$n";; blocked) blocked="$blocked,$n";;
+        blocked) blocked="$blocked,$n";;
         in-progress|in-review) active="$active,$n";; merged) merged="$merged,$n";;
         "") [ "$(cmd_ready "$n" 2>/dev/null || true)" = "start" ] && ready="$ready,$n";;
       esac
     done
   fi
   mt="$(printf '%s' "$mt" | sed 's/\\/\\\\/g; s/"/\\"/g')"; p="$(printf '%s' "$p" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-  printf '{"next":"%s","milestone":%s,"milestoneTitle":"%s","sprintBranch":"%s","sprintPR":%s,"ready":[%s],"active":[%s],"parked":[%s],"blocked":[%s],"merged":[%s]}\n' \
-    "$p" "${m:-null}" "$mt" "$sb" "${spr:-null}" "${ready#,}" "${active#,}" "${parked#,}" "${blocked#,}" "${merged#,}"
+  printf '{"next":"%s","milestone":%s,"milestoneTitle":"%s","sprintBranch":"%s","sprintPR":%s,"ready":[%s],"active":[%s],"blocked":[%s],"merged":[%s]}\n' \
+    "$p" "${m:-null}" "$mt" "$sb" "${spr:-null}" "${ready#,}" "${active#,}" "${blocked#,}" "${merged#,}"
 }
 
 cmd_base() { need_conf; base_of "$1"; }
@@ -344,11 +343,23 @@ cmd_plan() { # plan id|get|put|archive <N> [file]
   esac
 }
 
-cmd_ask() { # ask <N> <file> [needs-input|blocked]
-  need_conf; local n="$1" f="$2" s="${3:-needs-input}" body="$TMPD/q"
-  { echo "<!-- agentkit:question -->"; cat "$f"; echo; echo "_Reply in a comment on this issue. The next run picks your answer up._"; } > "$body"
+cmd_block() { # block <N> <file>: the issue can't go on safely; record why (first line = short reason) and move on
+  need_conf; local n="$1" f="$2" body="$TMPD/b"
+  { echo "<!-- agentkit:blocked -->"; cat "$f"; echo; echo "_Fix the cause, then run \`agentkit unblock $n\`._"; } > "$body"
   ghr issue comment "$n" -R "$(repo)" --body-file "$body" >/dev/null
-  set_status "$n" "$s"; say "#$n parked ($s)"
+  set_status "$n" blocked; say "#$n blocked"
+}
+
+cmd_unblock() { # unblock <N>: after the cause is fixed; the issue is ready again with a fresh session count
+  need_conf; local n="$1"
+  [ "$(status_of "$n")" = blocked ] || die "#$n is not blocked"
+  set_status "$n" none; reset_sessions "$n"; say "#$n unblocked"
+}
+
+block_reason() { # first line of the latest block record on N
+  api "repos/$(repo)/issues/$1/comments" --paginate \
+    --jq "[.[] | select(.user.login == \"$(agent_login)\" and (.body | startswith(\"<!-- agentkit:blocked\")))] | last | (.body // \"\") | split(\"\\n\")[1] // \"\"" \
+    | grep -v '^$' | tail -1 || true
 }
 
 cmd_findings() { # findings <N> <file>: post investigation findings and close
@@ -369,8 +380,8 @@ cmd_session() { # session <N>: count this session; blocks the issue past limits.
   if [ -n "$id" ]; then api -X PATCH "repos/$(repo)/issues/comments/$id" -F "body=@$f" >/dev/null
   else ghr issue comment "$n" -R "$(repo)" --body-file "$f" >/dev/null; fi
   if [ "$c" -gt "$lim" ]; then
-    printf 'This issue has used %s sessions without finishing (limit %s). What should change: the plan, the scope, or the limit?\n' "$((c-1))" "$lim" > "$TMPD/sq"
-    cmd_ask "$n" "$TMPD/sq" blocked >/dev/null
+    printf 'Used %s sessions without finishing (limit %s).\nChange the plan, the scope, or limits.issueSessions.\n' "$((c-1))" "$lim" > "$TMPD/sq"
+    cmd_block "$n" "$TMPD/sq" >/dev/null
     say "blocked"; return 4
   fi
   say "session $c of $lim"
@@ -627,7 +638,7 @@ EOF
     say "evidence: FAIL (placeholders left)"; ok=1; else say "evidence: present"; fi
   n="$(pr_issue "$pr" || true)"
   if [ -n "$n" ]; then st="$(status_of "$n")"
-    case "$st" in needs-input|blocked) say "issue #$n: FAIL (status:$st)"; ok=1;; *) say "issue #$n: ok";; esac; fi
+    case "$st" in blocked) say "issue #$n: FAIL (status:$st)"; ok=1;; *) say "issue #$n: ok";; esac; fi
   return $ok
 }
 
@@ -744,10 +755,15 @@ cmd_housekeeping() { # repair state so done work is never picked again; changes 
     if [ "$(api "repos/$(repo)/milestones/$m" --jq '.open_issues')" = 0 ]; then
       api -X PATCH "repos/$(repo)/milestones/$m" -f state=closed >/dev/null; say "milestone $m: closed"; fi
   done
-  # 2. open issues: merged PRs, answered questions, finished splits, finished investigations
+  # 2. open issues: merged PRs, finished splits, finished investigations, labels from older kits
   ghr issue list -R "$(repo)" --state open --limit 300 --json number,labels \
     --jq '.[] | [.number, ([.labels[].name] | join(" "))] | @tsv' > "$TMPD/open"
-  while IFS=$'\t' read -r n lb; do prime_labels "$n" "$lb"; done < "$TMPD/open"
+  while IFS=$'\t' read -r n lb; do
+    prime_labels "$n" "$lb"
+    case " $lb " in *" status:needs-input "*)
+      ghr issue edit "$n" -R "$(repo)" --remove-label status:needs-input >/dev/null; forget "$n"; set_status "$n" blocked
+      say "#$n: status:needs-input from an older kit is now status:blocked";; esac
+  done < "$TMPD/open"
   for n in $(cut -f1 "$TMPD/open"); do
     st="$(status_of "$n")"
     case "$st" in
@@ -758,17 +774,6 @@ cmd_housekeeping() { # repair state so done work is never picked again; changes 
         elif [ "$(type_of "$n")" = investigation ] && has_findings "$n"; then
           set_status "$n" none; ghr issue close "$n" -R "$(repo)" --comment "Findings posted above." >/dev/null; say "#$n: investigation closed"
         fi;;
-      needs-input|blocked)
-        ans="$(api "repos/$(repo)/issues/$n/comments" --paginate \
-          --jq '.[] | [.created_at, .user.login, .author_association, (if (.body | startswith("<!-- agentkit:question")) then "Q" elif (.body | startswith("<!-- agentkit:")) then "K" else "C" end)] | @tsv' \
-          | awk -F'\t' '$4=="Q"{q=$1} $4=="C"{c[NR]=$0} END{for(i in c){split(c[i],a,"\t"); if(a[1]>q) print a[2] "\t" a[3]}}')"
-        while IFS=$'\t' read -r who assoc; do
-          [ -n "$who" ] || continue
-          if trusted "$who" "$assoc"; then set_status "$n" none; reset_sessions "$n"; say "#$n: answered by $who, ready again"; break; fi
-        done <<EOF
-$ans
-EOF
-        ;;
       split)
         local parts open_parts=0 p
         parts="$(split_parts "$n")"
@@ -794,12 +799,11 @@ cmd_result() { # result <outcome> [N] [--keep-lock]: checks the outcome against 
     forget "$n"; st="$(status_of "$n")"
     case "$o" in
       merged)  [ "$st" = merged ] || [ "$(iget "$n" '.state')" = closed ] || { note="claimed merged, but #$n is status:${st:-none}"; o=error; };;
-      parked)  [ "$st" = needs-input ] || [ "$st" = split ] || { note="claimed parked, but #$n is status:${st:-none}"; o=error; };;
-      blocked) [ "$st" = blocked ] || { note="claimed blocked, but #$n is status:${st:-none}"; o=error; };;
-      continue) case "$st" in in-progress|in-review) ;; *) note="claimed continue, but #$n is status:${st:-none}"; o=error;; esac;;
+      blocked) if [ "$st" = blocked ]; then note="$(block_reason "$n")"; else note="claimed blocked, but #$n is status:${st:-none}"; o=error; fi;;
+      continue) case "$st" in in-progress|in-review|split) ;; *) note="claimed continue, but #$n is status:${st:-none}"; o=error;; esac;;
     esac
   fi
-  case "$o" in merged|parked|blocked|continue|idle|paused|awaiting-merge|milestone-complete|error) ;; *) note="unknown outcome $o"; o=error;; esac
+  case "$o" in merged|blocked|continue|idle|paused|awaiting-merge|milestone-complete|error) ;; *) note="unknown outcome $o"; o=error;; esac
   mkdir -p "$RUNTIME/runs"
   local ts line; ts="$(date -u +%Y%m%dT%H%M%SZ)"
   line="$(printf '{"outcome":"%s","issue":%s,"note":"%s","at":"%s"}' "$o" "${n:-null}" "$(printf '%s' "$note" | sed 's/"/\\"/g')" "$ts")"
@@ -817,7 +821,7 @@ EOF
 
 c="${1:-help}"; [ $# -eq 0 ] || shift
 case "$c" in
-  labels|preflight|pick|status|ready|base|claim|plan|ask|findings|session|housekeeping|rescue|branch|progress|sync|merge|wrap|result|split|milestone|help)
+  labels|preflight|pick|status|ready|base|claim|plan|block|unblock|findings|session|housekeeping|rescue|branch|progress|sync|merge|wrap|result|split|milestone|help)
     "cmd_$c" "$@";;
   set-status|ensure-sprint|check-task|check-full|open-pr|review-post|can-merge|new-issue|new-milestone|issue-body|pr-body|sync-sprint)
     "cmd_${c//-/_}" "$@";;

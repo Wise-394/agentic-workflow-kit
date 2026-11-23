@@ -9,18 +9,18 @@ One session, one unit of work, then stop. A runner outside the kit calls this ag
 
 **Find the kit:** `<kit>` is the folder two levels above this file's real path (resolve symlinks). Run the script as `bash <kit>/scripts/agentkit <command>` from the project root.
 
-**Unattended mode.** Nobody is watching. Never wait for a reply. Every point where a flow would ask the user becomes `agentkit ask <N> <file>` (the issue is parked), and you move on.
+**Unattended mode.** Nobody is watching, and nobody will reply. Never ask a question and never wait. Every point where a flow would ask the user is decided with "Deciding without a person" in [reference/safety.md](../../reference/safety.md): find it, decide and record it, or, only when nothing is safe, `agentkit block <N> <file>`.
 
 ## Steps
 
 1. **Preflight.** `agentkit preflight`. If it prints `paused`, finish with `agentkit result paused`. If it prints `locked: …`, another runner is working: finish with `agentkit result error --keep-lock`, so its lock stays. If it prints `error: …`, finish with `agentkit result error`. Nothing else runs.
-2. **Housekeeping.** `agentkit housekeeping`. It repairs state from earlier sessions: closed sprint issues, answered questions, merged PRs, empty milestones.
+2. **Housekeeping.** `agentkit housekeeping`. It repairs state from earlier sessions: closed sprint issues, merged PRs, finished splits and investigations, empty milestones.
 3. **Rescue.** `agentkit rescue`. It keeps a crashed session's uncommitted work as a WIP commit. If it prints `error`, finish with `agentkit result error`.
 4. **Pick.** `agentkit pick`, then act on its first word:
 
 | Pick says | Do | Finish with |
 |---|---|---|
-| `resume <N>` or `start <N>` | First `agentkit session <N>`. If it prints `blocked`, finish with `agentkit result blocked <N>`. Otherwise follow the [agentkit-run-issue](../agentkit-run-issue/SKILL.md) skill on `#N` in unattended mode | What run-issue ended with: `merged`, `continue`, `parked`, or `blocked`, with `<N>`. An investigation that posted its findings ends `merged <N>` (the issue is closed) |
+| `resume <N>` or `start <N>` | First `agentkit session <N>`. If it prints `blocked`, finish with `agentkit result blocked <N>`. Otherwise follow the [agentkit-run-issue](../agentkit-run-issue/SKILL.md) skill on `#N` in unattended mode | What run-issue ended with: `merged`, `continue`, or `blocked`, with `<N>`. An investigation that posted its findings ends `merged <N>` (the issue is closed) |
 | `wrap <milestone>` | Run **one** wrap-up phase from [agentkit-run-sprint](../agentkit-run-sprint/SKILL.md), "Wrap-up" | `milestone-complete` if the phase reached `ready`; otherwise `merged` |
 | `awaiting-merge <PR>` | Nothing | `awaiting-merge` |
 | `idle …` | Nothing | `idle` |
