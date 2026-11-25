@@ -17,11 +17,11 @@ required=(
 )
 for f in "${required[@]}"; do [ -f "$f" ] || report "missing required file $f"; done
 
-for r in scout test-writer coder verifier pr-reviewer; do
+for r in scout builder verifier pr-reviewer; do
   [ -f "roles/$r.md" ] || report "missing role roles/$r.md"
 done
 for f in roles/*.md; do
-  case "$(basename "$f" .md)" in scout|test-writer|coder|verifier|pr-reviewer) ;; *) report "unexpected role $f";; esac
+  case "$(basename "$f" .md)" in scout|builder|verifier|pr-reviewer) ;; *) report "unexpected role $f";; esac
   grep -q 'reference/safety.md' "$f" || report "$f doesn't list the safety baseline as an input"
 done
 

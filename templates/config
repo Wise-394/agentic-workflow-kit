@@ -62,6 +62,6 @@
 	issueFiles = 8
 	issueAcceptanceTests = 5
 	taskFiles = 3
-	smallChangedLines = 50
-	smallFiles = 2
+	quickChangedLines = 300
+	quickFiles = 5
 	lockMinutes = 240

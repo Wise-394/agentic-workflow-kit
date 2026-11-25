@@ -1,7 +1,7 @@
 <!-- agentkit:plan -->
 # Plan — #<N> <title>
 
-**Playbook:** <feature | bug-fix | refactor | investigation> · **Lane:** <standard | small> · **Repos:** <workspace only: repo folders this issue changes> · **Branch:** <branch> · **Base:** <base, per repo in a workspace> · **State:** <scouting | planned | building | verifying | in review | merged | done>
+**Playbook:** <feature | bug-fix | refactor | investigation> · **Lane:** <quick | standard> · **Repos:** <workspace only: repo folders this issue changes> · **Branch:** <branch> · **Base:** <base, per repo in a workspace> · **State:** <scouting | planned | building | verifying | in review | merged | done>
 
 **Size:** about <lines> changed lines in <files> files, <tasks> tasks (limits: <issueChangedLines> lines, <issueFiles> files)
 

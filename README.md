@@ -50,7 +50,7 @@ Each issue is built by a team of roles. The thinking-heavy roles get your strong
 | Intake | planner | Checks the issue is trusted, ready, and small enough. Splits it itself if it's too big |
 | Scout | scout | Finds the existing names, helpers, and patterns, with `file:line` |
 | Plan | planner | Writes contracts, error cases, tests, and tasks into one plan comment on the issue |
-| Build | test-writer, coder | Per task: a failing test first, then the code. Fresh agents for every task |
+| Build | builder | One agent per issue builds every task: a failing test first, then the code, then a checked commit. Quick-lane issues are built by the planner itself |
 | Check | `agentkit check-task` | The script runs format, tests, and checks, then commits |
 | Verify | verifier | Proves the change in the running app, following `docs/verify.md` |
 | Review | your review skill (optional), then pr-reviewer | Spec compliance, then code quality. Blockers come back as fix tasks |
@@ -58,7 +58,7 @@ Each issue is built by a team of roles. The thinking-heavy roles get your strong
 
 When every issue in a milestone is merged, wrap-up runs a sprint-wide check, a cross-issue review, and a retro that proposes new rules. Then the sprint PR is marked ready with every assumption listed, and **you merge it**. Agents never merge a sprint into your main line.
 
-**Model tiers.** *thinking* (planner, pr-reviewer) makes the decisions and judges quality. *working* (scout, test-writer, coder, verifier) carries them out. A stuck task gets one retry on the thinking model before you're asked.
+**Model tiers.** *thinking* (planner, pr-reviewer) makes the decisions and judges quality. *working* (scout, builder, verifier) carries them out. A stuck task gets one retry on the thinking model before you're asked.
 
 ## Bring your own skills
 
@@ -123,7 +123,7 @@ For unattended runs, also use a container or VM, a token scoped to one repositor
 | Path | Contents |
 |---|---|
 | [skills/](skills/) | The five entry skills: `agentkit-setup`, `agentkit-plan`, `agentkit-run-issue`, `agentkit-run-sprint`, `agentkit-next` |
-| [roles/](roles/) | Prompts for scout, test-writer, coder, verifier, and pr-reviewer |
+| [roles/](roles/) | Prompts for scout, builder, verifier, and pr-reviewer |
 | [scripts/agentkit](scripts/agentkit) | Every tracker and git write, in bash with `git` and `gh` |
 | [reference/](reference/) | Safety baseline, tracker rules, and the runner contract |
 | [templates/](templates/) | Config, `AGENTS.md`, project docs, and issue, plan, PR, and review bodies |

@@ -22,7 +22,7 @@ Subagents can't start other subagents, so the **planner is the main session**: i
 | File | Content |
 |---|---|
 | `CLAUDE.md` | `@AGENTS.md` (or that line added to an existing `CLAUDE.md`) |
-| `.claude/agents/agentkit-<role>.md` for scout, test-writer, coder, verifier, pr-reviewer | A thin agent that pins the role's model (below) |
+| `.claude/agents/agentkit-<role>.md` for scout, builder, verifier, pr-reviewer | A thin agent that pins the role's model (below) |
 | `.claude/settings.json` | Only if the user said yes to the unattended permission profile |
 
 Thin agent file:
@@ -39,7 +39,7 @@ You are a worker in the agentic workflow kit. Your caller gives you the path of 
 
 `model` takes an alias (`opus`, `sonnet`, `haiku`), a full model ID, or is left out for `inherit`. Suggested: **thinking** `opus` (also pick it for the main session with `/model`), **working** `sonnet`. Leave out `tools`, so the agents get the session's tools.
 
-**Escalation:** the subagent tool takes a `model` per call. A stuck test-writer or coder task is retried once by starting the same agent with the `thinking` model.
+**Escalation:** the subagent tool takes a `model` per call. A stuck builder task is retried once by starting a fresh builder with the `thinking` model. Fix rounds otherwise go to the running builder with SendMessage.
 
 ## Unattended runs
 

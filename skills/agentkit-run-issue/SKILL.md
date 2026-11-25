@@ -5,7 +5,9 @@ description: Use when the user hands over one issue (a link or a number) in a pr
 
 # Run one issue
 
-You are the **planner**. You make every decision, write the plan, start the workers, and judge their results. You never edit app code or tests yourself.
+You are the **planner**. You make every decision, write the plan, start the workers, and judge their results. Outside the quick lane you never edit app code or tests yourself.
+
+**Token budget.** Every fresh agent rereads the docs, so agents are the cost. A quick-lane issue starts one agent (the pr-reviewer); a standard-lane issue starts three (scout, builder, pr-reviewer), plus a verifier only when the change touches UI or a proof row needs more than a test. Don't start any other agent.
 
 **Find the kit:** `<kit>` is the folder two levels above this file's real path (resolve symlinks). `agentkit` below means `bash <kit>/scripts/agentkit`, run from the project root.
 
@@ -21,23 +23,25 @@ You are the **planner**. You make every decision, write the plan, start the work
 | **unattended** | Called by agentkit-next | Never ask, never wait. Open points are found, or decided and recorded as assumptions; only an unsafe one blocks ("Deciding without a person" in the safety baseline) |
 | `--plan-only` | The user adds it | Stop after step 3 and show the plan in the session. To build it, the user runs `agentkit-run-issue #N` again; it resumes from the saved plan |
 | `--step` | The user adds it | After each task, show the diff and wait for the user's OK. The task review also runs its quality pass |
+| `--quick` / `--full` | The user adds it | Forces the quick or the standard lane |
 
 ## Lanes
 
 | Lane | When | What's different |
 |---|---|---|
-| **standard** | Everything else | The full flow |
-| **small** | One behavior, at most `limits.smallChangedLines` changed lines and `limits.smallFiles` files besides tests, no new export others depend on, no schema or dependency change | You answer the scout questions yourself with read-only searches. Error cases and quality notes may be "none". One task. No verifier when every proof row is a test. The independent review still runs |
+| **quick** | The default when the change fits: at most `limits.quickFiles` files besides tests and about `limits.quickChangedLines` changed lines, no schema or dependency change, no new contract between repos | **No workers.** You answer the scout questions yourself with read-only searches, write a short plan (error cases and quality notes may be "none"), and build every task yourself in this session, following [roles/builder.md](../../roles/builder.md) (red, green, self-check, `check-task`). No verifier: a UI change gets a screenshot from you per `docs/verify.md`. The independent pr-reviewer still runs |
+| **standard** | Everything else | Scout, one builder for all tasks, one pr-reviewer |
 
 ## Starting a role
 
 Workers keep no memory; everything they need is in the plan comment. Start each one as a **fresh** subagent:
 
 - If the harness has an agent named `agentkit-<role>` (registered by the adapter to pin its model), use it. Otherwise use a general subagent. If the harness can't start subagents at all, start a new headless session of the same tool with the same prompt (the adapter gives the command): it is just as fresh.
-- Its whole prompt: `Read <kit>/roles/<role>.md and follow it exactly. Project root: <path>. Issue #<N>. Task <k>.` plus, only where the role asks for it, the failure lines or review findings to fix.
+- Its whole prompt: `Read <kit>/roles/<role>.md and follow it exactly. Project root: <path>. Issue #<N>.` (the builder also gets `Start at task <k>.`) plus, only where the role asks for it, the failure lines or review findings to fix.
 - Never pass your own summary, reasoning, or the other workers' reports.
+- **Reuse the builder.** Fix rounds, review findings, and escalation go to the same builder as a follow-up message (SendMessage with its ID) with the failing lines or findings, not to a new agent. Start a new builder only when the old one can't be reached (a new session).
 
-Roles: [scout](../../roles/scout.md), [test-writer](../../roles/test-writer.md), [coder](../../roles/coder.md), [verifier](../../roles/verifier.md), [pr-reviewer](../../roles/pr-reviewer.md).
+Roles: [scout](../../roles/scout.md), [builder](../../roles/builder.md), [verifier](../../roles/verifier.md), [pr-reviewer](../../roles/pr-reviewer.md).
 
 ## 0. Start
 
@@ -58,7 +62,7 @@ Roles: [scout](../../roles/scout.md), [test-writer](../../roles/test-writer.md),
 ## 2. Scout
 
 1. Write the plan with **Scout questions** and **State: scouting**, and save it: `agentkit plan put <N> <file>`. Ask for the existing names, files, helpers, and patterns the contracts depend on, and "which shared helpers already do part of this?".
-2. Standard lane: start the scout. Small lane: answer them yourself with read-only searches. Write the answers under each question.
+2. Standard lane: start the scout. Quick lane: answer them yourself with read-only searches. Write the answers under each question.
 
 ## 3. Plan
 
@@ -71,23 +75,19 @@ Roles: [scout](../../roles/scout.md), [test-writer](../../roles/test-writer.md),
 
 `agentkit branch <N>` creates or resumes the issue branch from the issue's base (its milestone's sprint branch, or the integration branch). Write **Branch** and **Base** into the plan. Workspace: once per repo in the plan's **Repos** (`--repo <r>`); write each repo's base. Set **State: building**.
 
-## 5. Build, one task at a time
+## 5. Build
 
-For each task not in `agentkit progress <N>`, in order:
+1. **Build.** Standard lane: start one builder for the whole issue, at the first task not in `agentkit progress <N>`. It does red, green, self-check, and `check-task` for each task in order, and reports per task. Quick lane: do the same yourself, following [roles/builder.md](../../roles/builder.md). In `--step` mode the builder stops after each task (add `Stop after each task.` to its prompt).
+2. **Spec check.** For each committed task, read its commit (`git show <sha>`, every new file in full). New tests fail first for the planned reason (the builder's red lines show it), the tests exist with the planned names, the contract names and shapes match, and nothing beyond the task was built. A miss becomes a **Review findings** row, sent back to the same builder and committed with the same `Task: k/n`. In `--step` mode also review quality against `docs/clean-code.md`, then show the user the diff and wait for an OK before messaging the builder to continue.
 
-1. **Red.** Start the test-writer. Every new test must fail for the plan's "fails first because" reason. The exceptions are a refactor's characterization tests, which pass, and **Existing test changes**, which pass or fail as planned. Otherwise add a review finding and run it again. Skip red when the task has no tests and no test changes.
-2. **Green.** Start the coder.
-3. **Check and commit.** `agentkit check-task <N> <k>/<n> "<commit message>" --tests <test files> --files <files>`. It formats, tests, runs the quick check, and commits and pushes only on `Result: ALL PASS`. On `FAILED`, start the coder with the failing lines, then check again.
-4. **Spec check.** Read the task's commit (`git show HEAD`, every new file in full). The task's tests exist with the planned names, the contract names and shapes match, and nothing beyond the task was built. A miss becomes a **Review findings** row, fixed by the coder (or test-writer) and committed with the same `Task: k/n`. In `--step` mode also review quality against `docs/clean-code.md`, then show the user the diff and wait for an OK.
-
-**Rounds.** Each trip back to a worker on a task counts toward `limits.taskRounds`; record it in **Counters**. At the limit, if the plan is right, run the task once more on the `thinking` model (escalation, unless `models.escalation = none`). Still stuck: `agentkit block <N> <file>` with the task, each attempt, and what would unblock it. Stop (`blocked`).
+**Rounds.** Each trip back to the builder on a task counts toward `limits.taskRounds`; record it in **Counters**. At the limit, if the plan is right, run the task once more on the `thinking` model (escalation, unless `models.escalation = none`; this is the one case for a fresh builder). Still stuck: `agentkit block <N> <file>` with the task, each attempt, and what would unblock it. Stop (`blocked`).
 
 **Checkpoint.** After `limits.tasksPerSession` tasks in this session, save the plan (State: building) and stop (`continue`). The next session resumes at the next task.
 
 ## 6. Verify
 
-1. `agentkit check-full <N>`: format, check, rules, size against the base, head sha. A failure becomes a fix task (step 5.2–5.4).
-2. Set **State: verifying**. If any proof row needs more than a test, or the lane is standard, start the verifier. It follows `docs/verify.md`, plus the `qa` slot's skill when `slots.qa` names one. If `docs/verify.md` doesn't exist yet:
+1. `agentkit check-full <N>`: format, check, rules, size against the base, head sha. A failure goes back to the builder (quick lane: you fix it), then step 5.2.
+2. Set **State: verifying**. Start the verifier only if the change touches UI or a proof row needs more than a test; when every proof row is a test, `check-full` is the evidence. Quick lane: no verifier; take the UI screenshot yourself. It follows `docs/verify.md`, plus the `qa` slot's skill when `slots.qa` names one. If `docs/verify.md` doesn't exist yet:
    - In `M0` (it is built there), skip the verifier: every proof row must be a test or a user check.
    - Elsewhere, interactive: create it first with [verify-doc.md](references/verify-doc.md).
    - Elsewhere, unattended: ask and stop.
@@ -101,9 +101,9 @@ For each task not in `agentkit progress <N>`, in order:
 
 ## 8. Independent review
 
-1. **Slots first.** If `slots.securityReview` names a skill and the change touches input handling, auth, secrets, queries, or dependencies, run it. If `slots.review` names a skill, run it. Run each in a fresh subagent that gets only the PR number and the issue number, and keep their findings.
-2. **The gate.** Start a fresh pr-reviewer with the issue number, the PR number, and the slot findings, if any. It follows [review.md](references/review.md) and posts its verdict with `agentkit review-post`. It never gets the plan or your summary.
-3. **Changes requested:** copy blockers and majors into **Review findings**, minors into **Follow-ups**. Fix them as one extra task (step 5, test-writer first if a test is missing or weak), run `agentkit check-full <N>`, update the PR body (`agentkit open-pr` again), and start a fresh pr-reviewer with the previously reviewed sha.
+1. **Slots.** Only when `slots.securityReview` or `slots.review` names a skill (empty or `off` means skip; the pr-reviewer already covers security and correctness): run it in a fresh subagent that gets only the PR number and the issue number, and keep its findings.
+2. **The gate.** Start one pr-reviewer with the issue number, every PR number of the issue (one reviewer covers all repos' PRs), and the slot findings, if any. It follows [review.md](references/review.md) and posts its verdict with `agentkit review-post`. It never gets the plan or your summary.
+3. **Changes requested:** copy blockers and majors into **Review findings**, minors into **Follow-ups**. Send them to the same builder as one extra task (test first if a test is missing or weak; quick lane: you fix them), run `agentkit check-full <N>`, update the PR body (`agentkit open-pr` again), and start a fresh pr-reviewer with the previously reviewed sha (fresh, so the re-review isn't anchored on the first one).
 4. After `limits.reviewRounds` reviews still requesting changes: `agentkit block <N> <file>` with the open findings, and stop (`blocked`).
 5. Any commit after an approval needs a new review before merging.
 

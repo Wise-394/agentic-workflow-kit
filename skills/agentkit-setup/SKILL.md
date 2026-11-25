@@ -60,7 +60,7 @@ Find each of these without asking, and note where it came from:
 
 Show what you found as a table (what, value, source) and ask the user to correct it. Then ask only what's left:
 
-1. **Models.** Two tiers. **thinking** (the planner and the pr-reviewer: judgment, design, review) gets the strongest model. **working** (scout, test-writer, coder, verifier: following a precise plan) gets a capable mid-tier model. Suggest from the adapter's list. `inherit` is always allowed. The user can pick the same model for both.
+1. **Models.** Two tiers. **thinking** (the planner and the pr-reviewer: judgment, design, review) gets the strongest model. **working** (scout, builder, verifier: following a precise plan) gets a capable mid-tier model. Suggest from the adapter's list. `inherit` is always allowed. The user can pick the same model for both.
 2. **Slots.** For each slot, list the installed skills that fit and well-known ones that could be installed, suggest one with a reason, and offer `kit` (the kit's own step) and, for optional slots, `off`:
 
    | Slot | Used for | Kit fallback | Examples of fillers |
