@@ -20,7 +20,7 @@ Install the kit in your tool (see `adapters/`), open the sandbox, and ask the ag
 | 2 | `agentkit-plan`: plan "add `average(numbers)`, 0 for an empty list" and "`sum` should accept numeric strings" | `docs/prd.md`, `docs/design.md`, milestones `M0` and `M1`, issues with acceptance tests, a verify issue per milestone |
 | 3 | Run `agentkit-next` repeatedly through M0 | Each session ends with an `AGENTKIT_RESULT` line; M0 issues merge into `sprint/m0`; wrap-up marks the sprint PR ready; then `awaiting-merge` |
 | 4 | Merge the M0 sprint PR yourself, run `agentkit-next` | Housekeeping closes the M0 issues and milestone; M1 starts |
-| 5 | Mid-issue, kill the session (Ctrl-C while the coder is working), run `agentkit-next` | `rescue` makes a WIP commit, the issue resumes, no task is redone |
+| 5 | Mid-issue, kill the session (Ctrl-C while the builder is working), run `agentkit-next` | `rescue` makes a WIP commit, the issue resumes, no task is redone |
 | 6 | Make one M1 issue vague (remove its acceptance tests, keep its requirement IDs); make another need a secret the runner doesn't have | The vague one is built, with its acceptance tests written from the PRD and listed under **Assumptions**. The other ends `blocked` with the reason in the result `note`; other issues continue. No question comments anywhere |
 | 7 | Add the secret, run `agentkit unblock <N>` | The next session builds it |
 | 8 | Label any issue `agentkit:pause` | `paused` until you remove the label |

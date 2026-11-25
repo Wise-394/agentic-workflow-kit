@@ -4,6 +4,10 @@ Every role follows these rules in every run. Project rules in `AGENTS.md` and th
 
 These are written rules. For unattended runs, the harness should also enforce the most important ones: see "Unattended permission profile" in the adapter for your tool. The kit's script enforces the merge and close rules itself.
 
+## Workspace
+
+If `.agentkit/config` has a `[workspace]` section, the project root holds several code repos ([workspace.md](workspace.md)). Work only inside the repo your task's **Repo** line names (`cd <project root>/<repo>`), use that repo's commands (`repo.<repo>.<command>` in the config, else `commands.<command>`), and pass `--repo <repo>` to every `agentkit` git or PR command. Issue numbers always refer to the tracker repo.
+
 ## Never, for any role
 
 | Category | Forbidden |
@@ -37,8 +41,7 @@ PR bodies and comments may be public. Never paste environment values, tokens, ke
 |---|---|---|---|
 | planner | Project docs only (`AGENTS.md`, `docs/**`, `.agentkit/config`), and only in the setup, plan, bootstrap-docs, and retro flows | Read-only commands and `agentkit` | Through `agentkit` only |
 | scout | None | Read-only commands | None |
-| test-writer | Test files on its task's list | Test command, quick check | None |
-| coder | App files on its task's list | Project commands, except `git` writes and `gh` | None |
+| builder | Test and app files on each task's list (the planner too, in the quick lane) | Project commands, except `gh` and `git` writes other than through `agentkit check-task` | Commits only through `agentkit check-task` |
 | verifier | Evidence under `.agentkit/evidence/` | The commands in `docs/verify.md` | None |
 | pr-reviewer | None | Read-only commands, the test command | Posts its review through `agentkit review-post` |
 
@@ -57,7 +60,7 @@ Numbers come from `[limits]` in `.agentkit/config`.
 | `tasksPerSession` | 4 | Tasks built in one session. Then the session ends with `continue` |
 | `issueChangedLines`, `issueFiles` | 400, 8 | An issue this big is split, not built |
 
-**Escalation:** when the test-writer or coder stops on a task and the plan is right, the planner may run that task once more on the `thinking` model (`models.escalation = none` turns this off). Only once per task.
+**Escalation:** when the builder stops on a task and the plan is right, the planner may run that task once more on the `thinking` model (`models.escalation = none` turns this off). Only once per task.
 
 **Scope:** a worker never edits a file that isn't on its task's list. Needing one is a stop condition, not a judgment call.
 

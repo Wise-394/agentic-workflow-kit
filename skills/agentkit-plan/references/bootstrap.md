@@ -15,7 +15,7 @@ Create these issues in `M0`, in this order, each with `type:chore`. Use [templat
     - **test:** one test file.
     - **format:** given files.
   - Each command exits 0 on the skeleton.
-  - The commands are written into `[commands]` in `.agentkit/config`. Until they exist, `agentkit check-task` refuses to pass anything, so the plan's first task lists `.agentkit/config` among its files and its coder writes them.
+  - The commands are written into `[commands]` in `.agentkit/config`. Until they exist, `agentkit check-task` refuses to pass anything, so the plan's first task lists `.agentkit/config` among its files and its builder writes them.
 - **Out of scope:** product features.
 
 ## 2. Continuous integration and the verify doc

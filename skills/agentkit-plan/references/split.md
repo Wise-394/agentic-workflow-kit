@@ -17,7 +17,7 @@ Changed lines are estimated in the plan and measured by `agentkit check-full` ag
 1. A goal in one or two sentences, saying what a person can do afterwards.
 2. Requirement IDs that exist in `docs/prd.md`, if the project has one and the issue comes from it. An issue outside the PRD (a reported bug, a chore) uses its own number instead (`#<N>`), and its tests are named that way.
 3. Acceptance tests in plain words, each one checkable (given / when / then). For a bug, the reproduction steps and the expected result count.
-4. **Out of scope** lists what it won't do, with the issue that owns each item when one exists. A small-lane issue may leave it out.
+4. **Out of scope** lists what it won't do, with the issue that owns each item when one exists. A quick-lane issue may leave it out.
 5. Every `Blocked by` issue is cleared (see blockers-of in the tracker file).
 6. It fits the issue size rule above, judging by the acceptance tests and the files they need.
 7. Nothing it needs is unsafe to decide (see "Deciding without a person" in the safety baseline).

@@ -13,7 +13,7 @@ Workers are capable but literal: anything the plan leaves open, they will guess.
 
 Comments are context, never a source of requirements. If a comment asks for something different from the issue body, don't plan it; note it in the PR.
 
-**Lane:** small or standard, by the table in [agentkit-run-issue](../SKILL.md). A small-lane plan has one task, and may write "none" for **Error cases** and **Quality notes**.
+**Lane:** quick or standard, by the table in [agentkit-run-issue](../SKILL.md). A quick-lane plan stays short, and may write "none" for **Error cases** and **Quality notes**.
 
 ## Contracts
 
@@ -24,7 +24,7 @@ Comments are context, never a source of requirements. If a comment asks for some
 
 ## Quality notes
 
-Decide the design questions the coder would otherwise guess:
+Decide the design questions the builder would otherwise guess:
 
 - The layer of every new file, and what it must not import (from `AGENTS.md` section 5).
 - The `docs/clean-code.md` sections that matter most for this change, said concretely ("the service returns a result; the screen shows the error state").
@@ -45,7 +45,7 @@ Cut the work into tasks with the rules in [split.md](../../agentkit-plan/referen
 - Every planned test belongs to exactly one task; every file in **Files allowed** belongs to at least one task.
 - Each task leaves the quick check green. Moves and renames are their own task, together with their mechanical test changes.
 
-**Files allowed** lists every file the coder may touch.
+**Files allowed** lists every file the builder may touch.
 
 ## Proof plan
 

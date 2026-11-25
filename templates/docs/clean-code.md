@@ -1,6 +1,6 @@
 # Code standard
 
-How code in this project must be written, and how a reviewer judges it. The coder and test-writer read this before writing; the pr-reviewer checks every change against it. Setup fills the `<…>` rows from the real repo and deletes rows it can't fill.
+How code in this project must be written, and how a reviewer judges it. The builder reads this before writing; the pr-reviewer checks every change against it. Setup fills the `<…>` rows from the real repo and deletes rows it can't fill.
 
 A rule in this file is never "taste". Breaking one is a finding with a severity (see **Severity** below). Anything this file doesn't cover is taste and never blocks.
 

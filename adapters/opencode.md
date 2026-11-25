@@ -23,8 +23,8 @@ The session that loads agentkit-run-issue, agentkit-run-sprint, or agentkit-next
 | File | Content |
 |---|---|
 | `AGENTS.md` | opencode reads it automatically |
-| `.opencode/agents/agentkit-<role>.md` for scout, test-writer, coder, verifier, pr-reviewer | A thin subagent that pins the role's model |
-| `.opencode/agents/agentkit-test-writer-escalated.md`, `agentkit-coder-escalated.md` | The same, on the `thinking` model, for the one escalation retry. Leave out if `models.escalation = none` |
+| `.opencode/agents/agentkit-<role>.md` for scout, builder, verifier, pr-reviewer | A thin subagent that pins the role's model |
+| `.opencode/agents/agentkit-builder-escalated.md` | The same, on the `thinking` model, for the one escalation retry. Leave out if `models.escalation = none` |
 | `opencode.json` permission block | Only if the user said yes to the unattended permission profile |
 
 Thin agent file:

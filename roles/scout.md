@@ -13,9 +13,10 @@ Answer the planner's scout questions with facts from the code and docs, so the p
 
 ## Steps
 
-1. Read `AGENTS.md` and the docs it points to.
-2. For each question, find the answer in the code. Quote the exact file path, line, and symbol.
-3. If a question has no answer in the repo, say "not found", list where you looked, and stop. Don't propose a design.
+1. Don't read the docs front to back. `AGENTS.md` is already in your context; open `docs/repos.md` or `docs/patterns.md` only when a question needs it, and only the section it needs.
+2. For each question, search the code first (`git grep -n`, `grep -rn`), then read only the lines around each hit. Find the answer in the code. Quote the exact file path, line, and symbol.
+3. Also list every existing test that touches a symbol the issue will change (`git grep -n "<symbol>" -- '*test*'`), so the plan can name **Existing test changes**.
+4. If a question has no answer in the repo, say "not found", list where you looked, and stop. Don't propose a design.
 
 ## Output
 

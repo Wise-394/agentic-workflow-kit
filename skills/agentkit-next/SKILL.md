@@ -7,7 +7,7 @@ description: Use when an unattended runner asks for the next unit of kit work in
 
 One session, one unit of work, then stop. A runner outside the kit calls this again and again; the contract is in [reference/orchestrator.md](../../reference/orchestrator.md).
 
-**Find the kit:** `<kit>` is the folder two levels above this file's real path (resolve symlinks). Run the script as `bash <kit>/scripts/agentkit <command>` from the project root.
+**Find the kit:** `<kit>` is the folder two levels above this file's real path (resolve symlinks). Run the script as `bash <kit>/scripts/agentkit <command>` from the project root. In a workspace ([reference/workspace.md](../../reference/workspace.md)) that is the workspace folder, and `awaiting-merge` lists one sprint PR per repo.
 
 **Unattended mode.** Nobody is watching, and nobody will reply. Never ask a question and never wait. Every point where a flow would ask the user is decided with "Deciding without a person" in [reference/safety.md](../../reference/safety.md): find it, decide and record it, or, only when nothing is safe, `agentkit block <N> <file>`.
 

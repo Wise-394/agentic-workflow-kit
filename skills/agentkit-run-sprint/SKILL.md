@@ -9,6 +9,8 @@ You are the **planner**. A sprint is one milestone (`M<k>: <name>`), one sprint 
 
 **Find the kit:** `<kit>` is the folder two levels above this file's real path (resolve symlinks). `agentkit` means `bash <kit>/scripts/agentkit`, run from the project root. Read `AGENTS.md`, [reference/safety.md](../../reference/safety.md), and [reference/tracker.md](../../reference/tracker.md) first.
 
+**Workspace:** with a `[workspace]` section in `.agentkit/config`, read [reference/workspace.md](../../reference/workspace.md). Each touched repo has its own sprint branch and sprint PR (created when an issue first branches there; `agentkit repos --sprint <milestone>` lists them). Commands marked per repo there take `--repo <r>`: run `ensure-sprint`, `pr-body`, `sync-sprint`, and `check-full --base` once per sprint repo, verify all of them together, and write `Closes <tracker repo>#N` in each sprint PR body. `wrap` already covers every repo.
+
 ## Interactive: the whole sprint in this session
 
 1. `agentkit preflight --no-lock`, `agentkit housekeeping`, `agentkit rescue`.
