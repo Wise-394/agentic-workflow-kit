@@ -8,7 +8,7 @@ Small pieces get reviewed well, fail cheaply, and resume cleanly. Work is cut at
 |---|---|---|---|
 | **Milestone** (sprint) | A version a person can use end to end | About 5–12 issues | Its verification issue is ticked and the sprint PR merges |
 | **Issue** (one PR) | One reviewable change | ≤ `issueChangedLines` (400) changed lines, ≤ `issueFiles` (8) files, ≤ `issueAcceptanceTests` (5) acceptance tests, one vertical slice or one layer | The Definition of Done in [agentkit-run-issue](../../agentkit-run-issue/SKILL.md) holds |
-| **Task** (one commit) | One behavior, one red-green cycle | ≤ `taskFiles` (3) files besides tests, about 2–15 minutes of work, one or two planned tests | Its **Done when** command prints the expected result, and the quick check is green |
+| **Task** (one commit) | One coherent change: the related behaviors that touch the same files or layer, each test written failing first | ≤ `taskFiles` (8) files besides tests, as many planned tests as the change needs | Its **Done when** command prints the expected result, and the quick check is green |
 
 Changed lines are estimated in the plan and measured by `agentkit check-full` against the point where the branch started. Generated files (lock files, migrations, snapshots) don't count.
 
@@ -51,7 +51,7 @@ Then:
 ## How to split an issue into tasks (in the plan)
 
 1. List the behaviors the acceptance tests need, inner layers first (domain rules, then data, then services, then UI and routes).
-2. One task per behavior. A task that would touch more than `taskFiles` files, or needs more than two planned tests, is two tasks.
+2. Group behaviors that change the same files or the same layer into one task. A task that would touch more than `taskFiles` files is two tasks.
 3. Order tasks so each one leaves the quick check green. Pure moves and renames get their own task, never mixed with logic changes.
 4. Each task names: its tests and test files, any existing test changes, its files, the pattern file to copy, its steps, a **Done when** (an exact command and its expected output), and its commit message.
 5. If the tasks add up past the issue size rule, split the issue instead.
