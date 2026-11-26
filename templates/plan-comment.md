@@ -48,9 +48,9 @@
 
 ## Tasks
 
-Each task is one behavior and one commit, and leaves the quick check green.
+Each task is one coherent change and one commit, and leaves the quick check green.
 
-### Task 1 — <behavior in a few words>
+### Task 1 — <change in a few words>
 - Repo: <workspace only: the one repo folder this task changes; paths below are relative to it>
 - Tests: Test <n>, Test <m>; existing test changes: <rows | none>
 - Test files: `<path>`

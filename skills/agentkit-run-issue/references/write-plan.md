@@ -40,7 +40,7 @@ Every test gets its file and all four lines: Setup, Action, Expect, Fails first 
 
 Cut the work into tasks with the rules in [split.md](../../agentkit-plan/references/split.md) ("How to split an issue into tasks"):
 
-- One behavior per task, inner layers first (domain, data, services, then UI and routes).
+- One coherent change per task (related behaviors in the same files or layer), inner layers first (domain, data, services, then UI and routes).
 - Each task lists its tests and test files, the existing test changes it makes, its files (at most `limits.taskFiles` besides tests), pattern file, numbered steps, a **Done when** with an exact command and expected output, and a commit message.
 - Every planned test belongs to exactly one task; every file in **Files allowed** belongs to at least one task.
 - Each task leaves the quick check green. Moves and renames are their own task, together with their mechanical test changes.

@@ -53,7 +53,7 @@ none
 
 ## Tasks
 
-Each task is one behavior and one commit, and leaves the quick check green.
+Each task is one coherent change and one commit, and leaves the quick check green.
 
 ### Task 1 — mean of a non-empty list
 - Tests: Test 1; existing test changes: none
